@@ -3,6 +3,7 @@
   
   export let selectedMonth: string = 'Feb';
   export let geojsonData: GeoJSON.FeatureCollection | null = null;
+  export let treeSpeciesColors: Map<string, string> = new Map();
   
   // Debug: Log when geojsonData changes
   $: console.log('Sidebar: geojsonData changed to:', geojsonData);
@@ -54,24 +55,22 @@
     
     console.log(`Sidebar: Processing ${geojsonData.features.length} features`);
     
-    const speciesMap = new Map<string, string>();
+    const speciesSet = new Set<string>();
     let validFeatures = 0;
     
+    // First, collect all unique species names from the GeoJSON
     geojsonData.features.forEach((feature, index) => {
       if (feature && feature.properties) {
         const properties = feature.properties as GeoJSONFeatureProperties;
         
         // Check if tree_species exists and is an array with at least one element
-        if (properties.tree_species && Array.isArray(properties.tree_species) && properties.tree_species.length > 0 && properties.colour_hex) {
+        if (properties.tree_species && Array.isArray(properties.tree_species) && properties.tree_species.length > 0) {
           validFeatures++;
           const speciesArray = properties.tree_species;
-          const color = properties.colour_hex;
           
           speciesArray.forEach(species => {
             if (species && typeof species === 'string' && species.trim()) {
-              if (!speciesMap.has(species)) {
-                speciesMap.set(species, color);
-              }
+              speciesSet.add(species);
             }
           });
         } else {
@@ -80,20 +79,90 @@
       }
     });
     
-    console.log(`Sidebar: Found ${speciesMap.size} unique species from ${validFeatures} valid features`);
+    console.log(`Sidebar: Found ${speciesSet.size} unique species from ${validFeatures} valid features`);
     
-    if (speciesMap.size === 0) {
+    if (speciesSet.size === 0) {
       console.log('Sidebar: No species found, returning empty array');
       return [];
     }
     
-    // Convert map to array of objects and sort by species name
-    const speciesList = Array.from(speciesMap.entries()).map(([species, color]) => ({
+    // Convert set to array and sort by species name
+    const sortedSpecies = Array.from(speciesSet).sort((a, b) => a.localeCompare(b));
+    
+    // Debug: Log the treeSpeciesColors to see what we have
+  console.log('Sidebar: treeSpeciesColors available:', treeSpeciesColors.size, 'entries');
+  if (treeSpeciesColors.size > 0) {
+    console.log('Sidebar: Sample treeSpeciesColors entries:', Array.from(treeSpeciesColors.entries()).slice(0, 10));
+  }
+  
+  // Now create the legend items, looking up colors from treeSpeciesColors
+  const speciesList = sortedSpecies.map(species => {
+    // Try to find the color for this species
+    let color = '#cccccc'; // Default gray color if not found
+    let matchType = 'none';
+    
+    // Debug: Log what species we're looking for
+    console.log(`Sidebar: Looking up color for species: "${species}"`);
+    
+    // Check if we have a color for this exact species name
+    if (treeSpeciesColors.has(species)) {
+      color = treeSpeciesColors.get(species) || '#cccccc';
+      matchType = 'exact';
+      console.log(`Sidebar: Found exact match for "${species}": ${color}`);
+    } else {
+      // Try different matching strategies
+      
+      // 1. Try to match by the main genus name (first word)
+      const speciesWords = species.split(' ');
+      const genusName = speciesWords[0];
+      
+      for (const [speciesName, speciesColor] of treeSpeciesColors) {
+        const speciesNameWords = speciesName.split(' ');
+        const speciesNameGenus = speciesNameWords[0];
+        
+        // Check if genus names match
+        if (genusName && speciesNameGenus && genusName.toLowerCase() === speciesNameGenus.toLowerCase()) {
+          color = speciesColor;
+          matchType = 'genus';
+          console.log(`Sidebar: Found genus match for "${species}" with "${speciesName}": ${color}`);
+          break;
+        }
+      }
+      
+      // 2. If no genus match, try partial name matching
+      if (matchType === 'none') {
+        for (const [speciesName, speciesColor] of treeSpeciesColors) {
+          if (speciesName && species.toLowerCase().includes(speciesName.toLowerCase())) {
+            color = speciesColor;
+            matchType = 'partial';
+            console.log(`Sidebar: Found partial match for "${species}" with "${speciesName}": ${color}`);
+            break;
+          }
+        }
+      }
+      
+      // 3. If still no match, try the reverse - see if speciesName contains species
+      if (matchType === 'none') {
+        for (const [speciesName, speciesColor] of treeSpeciesColors) {
+          if (species && speciesName.toLowerCase().includes(species.toLowerCase())) {
+            color = speciesColor;
+            matchType = 'reverse-partial';
+            console.log(`Sidebar: Found reverse partial match for "${species}" with "${speciesName}": ${color}`);
+            break;
+          }
+        }
+      }
+    }
+    
+    if (matchType === 'none') {
+      console.log(`Sidebar: No color found for "${species}", using default gray`);
+    }
+    
+    return {
       species,
       color
-    }));
-    
-    speciesList.sort((a, b) => a.species.localeCompare(b.species));
+    };
+  });
     
     console.log('Sidebar: Final species list:', speciesList);
     

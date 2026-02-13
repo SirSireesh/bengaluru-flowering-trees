@@ -7,6 +7,7 @@
   let isLoading: boolean = true;
   let error: string | null = null;
   let selectedMonth: string = 'Feb';
+  let treeSpeciesColors: Map<string, string> = new Map();
   
   interface GeoJSONFeatureProperties {
     h3_index: string;
@@ -19,11 +20,53 @@
   }
   
   onMount(async () => {
+    await loadTreeSpeciesColors();
     await loadGeoJSONData(selectedMonth);
   });
   
   let mapViewRef;
   
+  async function loadTreeSpeciesColors() {
+    try {
+      console.log('Loading tree species colors from JSON file...');
+      
+      // Load the pre-converted JSON file
+      const response = await fetch('/tree_species_colors.json');
+      if (!response.ok) {
+        throw new Error(`Failed to load JSON file: ${response.status} ${response.statusText}`);
+      }
+      
+      const speciesColorsData = await response.json();
+      
+      // Convert the JSON object to a Map
+      const colorsMap = new Map<string, string>();
+      for (const [species, color] of Object.entries(speciesColorsData)) {
+        if (species && color && species !== 'Others') {
+          colorsMap.set(species, color);
+        }
+      }
+      
+      treeSpeciesColors = colorsMap;
+      console.log(`Loaded ${colorsMap.size} tree species colors from JSON file`);
+      console.log('Sample colors:', Array.from(colorsMap.entries()).slice(0, 10));
+      
+      // Debug: Log all the species names we loaded
+      console.log('All loaded species names:', Array.from(colorsMap.keys()));
+      
+    } catch (err) {
+      console.error('Error loading tree species colors:', err);
+      // If we can't load the JSON file, we'll fall back to default colors
+      // Set up some default colors for common species
+      const defaultColors = new Map<string, string>();
+      defaultColors.set('Pink', '#ff69b4');
+      defaultColors.set('Yellow', '#fff000');
+      defaultColors.set('White', '#f8f8ff');
+      defaultColors.set('Red', '#800000');
+      defaultColors.set('Orange', '#ffa500');
+      treeSpeciesColors = defaultColors;
+    }
+  }
+
   async function loadGeoJSONData(month: string) {
     isLoading = true;
     error = null;
@@ -127,7 +170,7 @@
 </script>
 
 <div class="app-container">
-  <Sidebar selectedMonth={selectedMonth} geojsonData={geojsonData} on:monthChange={handleMonthChange} />
+  <Sidebar selectedMonth={selectedMonth} geojsonData={geojsonData} treeSpeciesColors={treeSpeciesColors} on:monthChange={handleMonthChange} />
   
   <div class="main-content">
     <div class="map-container">
