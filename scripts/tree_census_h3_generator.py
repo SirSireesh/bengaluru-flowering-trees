@@ -1,4 +1,7 @@
 import argparse
+import json
+from pathlib import Path
+
 import geopandas as gpd
 import pandas as pd
 import h3pandas
@@ -27,6 +30,10 @@ def parse_args():
         choices=["png", "geojson", "both"],
         default="both",
         help="Output format: png, geojson, or both (default: both)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        help="The directory to store the resultant files in",
     )
     return parser.parse_args()
 
@@ -131,7 +138,7 @@ for month in MONTHS:
     # Filter data for trees flowering in the current month
     month_column = month  # Column names are the month names (Jan, Feb, etc.)
     flowering_in_month = flowering_tree_df[
-        flowering_tree_df[month_column] == True
+        flowering_tree_df[month_column]
     ].copy()
 
     if len(flowering_in_month) == 0:
@@ -153,11 +160,13 @@ for month in MONTHS:
         if blended_color:
             # Get unique tree species names for this H3 cell
             tree_species = group["TreeName"].unique().tolist()
-            blended_colors.append({
-                "h3_index": h3_index, 
-                "colour_hex": blended_color,
-                "tree_species": tree_species
-            })
+            blended_colors.append(
+                {
+                    "h3_index": h3_index,
+                    "colour_hex": blended_color,
+                    "tree_species": tree_species,
+                }
+            )
 
     if not blended_colors:
         print(f"No valid blended colors for {month}, skipping...")
@@ -188,7 +197,6 @@ for month in MONTHS:
     color_list = list(colour_hexes)
     cmap = mcolors.ListedColormap(color_list)
 
-
     # Plot with proper color handling
     h3_cells.plot(
         ax=ax,
@@ -212,7 +220,7 @@ for month in MONTHS:
     if args.output_format in ["png", "both"]:
         plt.tight_layout()
         png_filename = f"h3_tree_distribution_{month}_resolution_{args.resolution}.png"
-        plt.savefig(png_filename, dpi=300, bbox_inches="tight")
+        plt.savefig(Path(args.output_dir) / png_filename, dpi=300, bbox_inches="tight")
         plt.close()
         print(f"Saved PNG to '{png_filename}'")
     else:
@@ -249,7 +257,35 @@ for month in MONTHS:
         geojson_gdf = geojson_gdf.set_crs(epsg=4326)
 
         # Save as GeoJSON
-        geojson_gdf.to_file(geojson_filename, driver="GeoJSON")
+        geojson_gdf.to_file(Path(args.output_dir) / geojson_filename, driver="GeoJSON")
         print(f"Saved GeoJSON to '{geojson_filename}'")
 
     print(f"Created H3 grid with {len(h3_cells)} cells for {month}")
+
+# After processing all months, generate the tree species colors JSON file
+print("\nGenerating tree species colors JSON file...")
+
+# Filter out 'Others' and rows with NaN colours
+tree_data_filtered = tree_data[tree_data["TreeName"] != "Others"]
+tree_data_filtered = tree_data_filtered.dropna(subset=["colour"])
+
+# Create a dictionary of species to color
+species_colors = {}
+for idx, row in tree_data_filtered.iterrows():
+    tree_name = row["TreeName"]
+    colour = row["colour"]
+
+    # Store both the full name and a cleaned version (without scientific names)
+    species_colors[tree_name] = colour
+
+# Save to JSON
+json_filename = "tree_species_colors.json"
+with open(Path(args.output_dir) / json_filename, "w") as f:
+    json.dump(species_colors, f, indent=2)
+
+print(
+    f"Saved tree species colors to '{json_filename}' with {len(species_colors)} entries"
+)
+print("Sample entries:")
+for i, (species, color) in enumerate(list(species_colors.items())[:10]):
+    print(f"  '{species}' -> {color}")
