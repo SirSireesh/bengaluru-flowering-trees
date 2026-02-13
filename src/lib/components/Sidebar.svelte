@@ -240,6 +240,9 @@
       <div class="source-item">
         <a href="https://www.wildwanderer.com/flowering-trees/" target="_blank" rel="noopener noreferrer">Wild Wanderer</a>
       </div>
+      <div class="source-item">
+        <a href="https://github.com/SirSireesh/bengaluru-flowering-trees" target="_blank" rel="noopener noreferrer">Source Code</a>
+      </div>
     </div>
   </div>
 </div>
@@ -276,7 +279,7 @@
   }
 
   .source-list {
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     line-height: 1.5;
   }
 
