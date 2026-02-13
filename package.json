@@ -1,0 +1,23 @@
+{
+  "name": "svelte-tree-viz",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@tsconfig/svelte": "^5.0.4",
+    "svelte": "^5.45.2",
+    "typescript": "^5.5.4",
+    "vite": "^7.3.1",
+    "vite-plugin-copy": "^0.1.6"
+  },
+  "dependencies": {
+    "maplibre-gl": "^5.18.0"
+  }
+}

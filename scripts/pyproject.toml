@@ -1,0 +1,18 @@
+[project]
+name = "blr-tree-viz"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "beautifulsoup4>=4.14.3",
+    "geopandas>=1.1.2",
+    "h3pandas>=0.3.0",
+    "html5lib>=1.1",
+    "ipython>=9.10.0",
+    "lxml>=6.0.2",
+    "matplotlib>=3.10.8",
+    "notebook>=7.5.3",
+    "pyarrow>=23.0.0",
+    "tqdm>=4.67.3",
+]
