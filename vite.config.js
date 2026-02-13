@@ -10,6 +10,7 @@ export default defineConfig({
       targets: [
         { src: 'public/geojson/*', dest: 'dist/geojson' },
         { src: 'public/tree_species.parquet', dest: 'dist' },
+        { src: 'public/tree_species_colors.json', dest: 'dist' },
         { src: 'public/vite.svg', dest: 'dist' }
       ],
       hook: 'writeBundle'
