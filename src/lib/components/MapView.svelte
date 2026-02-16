@@ -22,28 +22,9 @@
   
   // Create the initial layer
   function createInitialLayer() {
-    console.log('MapView: createInitialLayer called');
-    console.log('MapView: map.getSource(sourceId):', map?.getSource(sourceId));
-    
     if (map && map.getSource(sourceId)) {
-      console.log(`Creating initial layer with ${geojsonData?.features?.length || 0} features`);
-      console.log('GeoJSON data sample:', geojsonData?.features?.slice(0, 3));
-      
-      // Validate GeoJSON structure
-      if (geojsonData && geojsonData.features) {
-        geojsonData.features.forEach((feature, index) => {
-          if (!feature.properties || !feature.properties.colour_hex) {
-            console.warn(`Feature at index ${index} missing colour_hex property`, feature);
-          }
-          if (!feature.geometry || !feature.geometry.coordinates) {
-            console.warn(`Feature at index ${index} missing geometry coordinates`, feature);
-          }
-        });
-      }
-      
       // Add the layers
       try {
-        console.log(`MapView: Adding fill layer with source ${sourceId}`);
         map.addLayer({
           id: layerId,
           type: 'fill',
@@ -62,7 +43,6 @@
             'fill-outline-color': '#ffffff'
           }
         });
-        console.log(`MapView: Fill layer ${layerId} added successfully`);
       } catch (error) {
         console.error(`MapView: Failed to add fill layer:`, error);
       }
@@ -76,7 +56,6 @@
           'line-width': 0.5
         }
       });
-      console.log(`MapView: Outline layer ${layerId}-outline added successfully`);
       
       // Add event handlers only if they haven't been added yet
       if (!map._popupHandlerAdded) {
@@ -151,55 +130,34 @@
     
     // Wait for the map to be idle (style loaded and ready)
     map.on('idle', () => {
-      console.log('MapView: Map idle event fired (style loaded)');
-      console.log('MapView: geojsonData at idle time:', geojsonData);
-      
       // Only add source if it doesn't already exist
       if (!map.getSource(sourceId)) {
-        console.log('MapView: Adding source (first time)');
         map.addSource(sourceId, {
           type: 'geojson',
           data: geojsonData || { type: 'FeatureCollection', features: [] }
         });
         
-        console.log('MapView: Source added:', sourceId);
-        console.log('MapView: Source data:', map.getSource(sourceId).serialize().data);
-        
         // Create the initial layer immediately after adding the source
         createInitialLayer();
       } else {
-        console.log('MapView: Source already exists, skipping initial setup');
-        
         // Just update the data if source already exists
         if (geojsonData) {
           map.getSource(sourceId).setData(geojsonData);
-          console.log('MapView: Updated existing source data');
         }
       }
-      
-      // Event handlers will be added after layer creation
     });
   });
   
   // Update the layer when data changes
   function updateGeoJSONLayer() {
-    console.log('MapView: updateGeoJSONLayer called');
-    console.log('MapView: map.isStyleLoaded():', map?.isStyleLoaded());
-    console.log('MapView: map.getSource(sourceId):', map?.getSource(sourceId));
-    
     if (map && map.isStyleLoaded()) {
-      console.log(`Updating layer with ${geojsonData?.features?.length || 0} features`);
-      
       // Simple approach: just update the source data if it exists
       if (map.getSource(sourceId)) {
-        console.log('MapView: Source exists, updating data');
         try {
           map.getSource(sourceId).setData(geojsonData || { type: 'FeatureCollection', features: [] });
-          console.log('MapView: Source data updated successfully');
           
           // Fit map to the bounds of the GeoJSON data if features exist
           if (geojsonData && geojsonData.features && geojsonData.features.length > 0) {
-            console.log('MapView: Fitting bounds to data');
             const bounds = new LngLatBounds();
             geojsonData.features.forEach(feature => {
               if (feature.geometry.type === 'Polygon') {
@@ -213,19 +171,27 @@
         } catch (error) {
           console.error(`MapView: Error updating source data:`, error);
         }
-      } else {
-        console.log('MapView: Source does not exist, will be created when map is ready');
       }
-    } else {
-      console.log('MapView: Cannot update layer - map not ready');
     }
   }
+  
+  // Track previous data to prevent unnecessary updates
+  let previousDataString: string | null = null;
   
   // Expose update function to parent
   export function updateData(newData: GeoJSON.FeatureCollection | null) {
     console.log('MapView: updateData called with', newData?.features?.length || 0, 'features');
-    geojsonData = newData;
-    updateGeoJSONLayer();
+    
+    // Only update if data actually changed
+    const newDataString = JSON.stringify(newData);
+    if (newDataString !== previousDataString) {
+      console.log('MapView: Data changed, updating map');
+      geojsonData = newData;
+      previousDataString = newDataString;
+      updateGeoJSONLayer();
+    } else {
+      console.log('MapView: Data unchanged, skipping update');
+    }
   }
   
   onDestroy(() => {

@@ -115,13 +115,17 @@
         const sampleColors = data.features.slice(0, 5).map(f => f.properties?.colour_hex);
         console.log(`Sample colors: ${sampleColors.join(', ')}`);
       }
-      geojsonData = data;
-      console.log(`App.svelte: Successfully loaded ${month} GeoJSON data with`, data.features?.length || 0, 'features');
-      console.log('App.svelte: Sample feature properties:', data.features?.[0]?.properties);
       
       // Update the map view with the new data
       if (mapViewRef && typeof mapViewRef.updateData === 'function') {
         mapViewRef.updateData(data);
+      }
+      
+      // Only update geojsonData if it actually changed to prevent unnecessary re-renders
+      const dataString = JSON.stringify(data);
+      const currentDataString = JSON.stringify(geojsonData);
+      if (dataString !== currentDataString) {
+        geojsonData = data;
       }
       
     } catch (err) {
@@ -130,11 +134,17 @@
       
       // Create a mock GeoJSON for demonstration purposes
       const mockData = createMockGeoJSON();
-      geojsonData = mockData;
       
       // Update the map view with mock data
       if (mapViewRef && typeof mapViewRef.updateData === 'function') {
         mapViewRef.updateData(mockData);
+      }
+      
+      // Only update geojsonData if it actually changed to prevent unnecessary re-renders
+      const mockDataString = JSON.stringify(mockData);
+      const currentDataString = JSON.stringify(geojsonData);
+      if (mockDataString !== currentDataString) {
+        geojsonData = mockData;
       }
     } finally {
       isLoading = false;
