@@ -181,7 +181,7 @@
   <h2>Flowering Trees of Bengaluru</h2>
   
   <div class="month-selector">
-    <label for="month-dropdown">Select Month:</label>
+    <label for="month-dropdown">Month:</label>
     <select id="month-dropdown" value={selectedMonth} on:change={handleMonthChange}>
       {#each months as month}
         <option value={month.value}>{month.label}</option>
@@ -336,18 +336,21 @@
     background-color: white;
     border-radius: 5px;
     border: 1px solid #eee;
+    display: flex;
+    align-items: center;
   }
 
   .month-selector label {
-    display: block;
+    display: inline-block;
     margin-bottom: 8px;
     font-weight: 600;
     color: #444;
     font-size: 0.9rem;
+    margin-right: 8px;
   }
 
   .month-selector select {
-    width: 100%;
+    flex: 1;
     padding: 8px 12px;
     border: 1px solid #ddd;
     border-radius: 4px;
@@ -372,4 +375,6 @@
     color: #333;
     background-color: white;
   }
+  
+
 </style>
