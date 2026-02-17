@@ -118,7 +118,7 @@
     // Initialize MapLibre GL map with OpenFreeMap dark style
     map = new Map({
       container: mapContainer,
-      style: 'https://tiles.openfreemap.org/styles/dark',
+      style: 'https://tiles.openfreemap.org/styles/positron',
       center: [77.5946, 12.9716], // Bengaluru coordinates [lng, lat]
       zoom: 12
     });
