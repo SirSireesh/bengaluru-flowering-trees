@@ -10,7 +10,6 @@
   let selectedMonth: string = 'Feb';
   let treeSpeciesColors: Map<string, string> = new Map();
   let isMobile: boolean = false;
-  let showLegend: boolean = false;
   
   interface GeoJSONFeatureProperties {
     h3_index: string;
@@ -40,7 +39,16 @@
   onMount(async () => {
     // Check if we're on a mobile device
     function checkMobile() {
+      const wasMobile = isMobile;
       isMobile = window.innerWidth <= 768;
+      
+      // If mobile state changed, trigger map resize
+      if (wasMobile !== isMobile && mapViewRef && typeof mapViewRef.resizeMap === 'function') {
+        // Use setTimeout to allow DOM to update first
+        setTimeout(() => {
+          mapViewRef.resizeMap();
+        }, 100);
+      }
     }
     
     // Initial check
@@ -49,11 +57,35 @@
     // Add resize listener
     window.addEventListener('resize', checkMobile);
     
+    // Initial resize after a short delay to ensure map is initialized
+    setTimeout(() => {
+      if (mapViewRef && typeof mapViewRef.resizeMap === 'function') {
+        mapViewRef.resizeMap();
+      }
+    }, 500);
+    
     await loadTreeSpeciesColors();
+    
+    // Small delay before loading data to ensure map is properly sized
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     await loadGeoJSONData(selectedMonth);
   });
   
   let mapViewRef;
+  let lastLoadedMonth: string = '';
+  
+  // Reactive statement to handle mobile state changes
+  $: {
+    if (mapViewRef && typeof mapViewRef.resizeMap === 'function') {
+      // Use requestAnimationFrame for smoother resize
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          mapViewRef.resizeMap();
+        }, 50);
+      });
+    }
+  }
   
   async function loadTreeSpeciesColors() {
     try {
@@ -100,6 +132,12 @@
     isLoading = true;
     error = null;
     
+    // Simple and logical: If we're loading the same month again, skip the network request
+    if (lastLoadedMonth === month && geojsonData) {
+      isLoading = false;
+      return;
+    }
+    
     try {
       // Load the GeoJSON file for the selected month
       const filename = `h3_tree_distribution_${month}_resolution_10.geojson`;
@@ -110,22 +148,14 @@
       }
       
       const data: GeoJSON.FeatureCollection<GeoJSON.Geometry, GeoJSONFeatureProperties> = await response.json();
-      console.log(`Loaded ${month} data with ${data.features?.length || 0} features`);
-      if (data.features && data.features.length > 0) {
-        const sampleColors = data.features.slice(0, 5).map(f => f.properties?.colour_hex);
-        console.log(`Sample colors: ${sampleColors.join(', ')}`);
-      }
+      
+      // For different months, always update the data since flowering patterns change
+      geojsonData = data;
+      lastLoadedMonth = month;
       
       // Update the map view with the new data
       if (mapViewRef && typeof mapViewRef.updateData === 'function') {
         mapViewRef.updateData(data);
-      }
-      
-      // Only update geojsonData if it actually changed to prevent unnecessary re-renders
-      const dataString = JSON.stringify(data);
-      const currentDataString = JSON.stringify(geojsonData);
-      if (dataString !== currentDataString) {
-        geojsonData = data;
       }
       
     } catch (err) {
@@ -140,12 +170,9 @@
         mapViewRef.updateData(mockData);
       }
       
-      // Only update geojsonData if it actually changed to prevent unnecessary re-renders
-      const mockDataString = JSON.stringify(mockData);
-      const currentDataString = JSON.stringify(geojsonData);
-      if (mockDataString !== currentDataString) {
-        geojsonData = mockData;
-      }
+      // Update geojsonData with mock data for display
+      geojsonData = mockData;
+      lastLoadedMonth = month;
     } finally {
       isLoading = false;
     }
@@ -249,36 +276,33 @@
     </div>
     
     {#if isMobile}
-      <!-- Mobile: Bottom bar layout -->
-      <div class="bottom-bar">
-        <div class="month-selector">
-          <label for="month-dropdown">Month:</label>
-          <select id="month-dropdown" value={selectedMonth} on:change={handleMonthChange}>
-            {#each months as month}
-              <option value={month.value}>{month.label}</option>
-            {/each}
-          </select>
+      <!-- Mobile: Bottom bar layout with scrollable content -->
+      <div class="bottom-bar-container">
+        <!-- Fixed bottom bar that's always visible -->
+        <div class="bottom-bar-fixed">
+          <div class="month-selector">
+            <label for="month-dropdown">Month:</label>
+            <select id="month-dropdown" value={selectedMonth} on:change={handleMonthChange}>
+              {#each months as month}
+                <option value={month.value}>{month.label}</option>
+              {/each}
+            </select>
+          </div>
         </div>
         
-        <button class="legend-toggle" on:click={() => showLegend = !showLegend}>
-          {showLegend ? 'Hide Legend' : 'Show Legend'}
-        </button>
-        
-        {#if showLegend}
-          <div class="legend-overlay">
-            <div class="legend-content">
-              <h3>Tree Species Legend</h3>
-              <div class="legend-scrollable">
-                {#if geojsonData}
-                  <LegendComponent geojsonData={geojsonData} treeSpeciesColors={treeSpeciesColors} />
-                {:else}
-                  <div class="loading-legend">Loading legend data...</div>
-                {/if}
-              </div>
-              <button class="close-legend" on:click={() => showLegend = false}>Close</button>
+        <!-- Scrollable content area that appears when scrolling up -->
+        <div class="bottom-scrollable-content">
+          <div class="legend-content-mobile">
+            <h3>Tree Species Legend</h3>
+            <div class="legend-scrollable">
+              {#if geojsonData}
+                <LegendComponent geojsonData={geojsonData} treeSpeciesColors={treeSpeciesColors} />
+              {:else}
+                <div class="loading-legend">Loading legend data...</div>
+              {/if}
             </div>
           </div>
-        {/if}
+        </div>
       </div>
     {/if}
   </div>
@@ -315,12 +339,15 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-width: 0; /* Important for flex children to respect parent bounds */
   }
   
   .map-container {
     flex: 1;
     position: relative;
     overflow: hidden;
+    min-height: 0; /* Important for flex children to respect parent bounds */
+    background-color: transparent; /* Ensure no background color issues */
   }
   
   .loading-overlay {
@@ -376,31 +403,52 @@
     color: #666;
   }
   
-  /* Bottom bar styles */
-  .bottom-bar {
+  /* Bottom bar container */
+  .bottom-bar-container {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    background-color: #f5f5f5;
-    padding: 12px 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 12px;
-    box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
     z-index: 1000;
     box-sizing: border-box;
+    pointer-events: none; /* Allow map interactions through the container */
+  }
+  
+  /* Fixed bottom bar that's always visible */
+  .bottom-bar-fixed {
+    background-color: #f5f5f5;
+    padding: 12px 16px;
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+    z-index: 1001;
+    position: relative;
+    pointer-events: auto; /* Enable interactions for the bottom bar */
+  }
+  
+  /* Scrollable content area */
+  .bottom-scrollable-content {
+    background-color: #f5f5f5;
+    padding: 0 16px 16px;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-in-out;
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+    pointer-events: auto; /* Enable interactions for scrollable content */
+  }
+  
+  /* Show scrollable content when bottom bar is scrolled */
+  .bottom-bar-container:hover .bottom-scrollable-content,
+  .bottom-bar-container:focus-within .bottom-scrollable-content {
+    max-height: 70vh;
+    overflow-y: auto;
   }
   
   .month-selector {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex: 1;
+    flex: 0 0 auto; /* Don't grow or shrink */
     min-width: 150px;
-    max-width: 250px;
+    max-width: 100%;
   }
   
   .month-selector label {
@@ -420,6 +468,7 @@
     transition: border-color 0.2s;
     color: #333;
     flex: 1;
+    min-width: 120px;
   }
   
   .month-selector select:hover {
@@ -432,78 +481,28 @@
     box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
   }
   
-  .legend-toggle {
-    padding: 6px 12px;
-    background-color: white;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 0.9rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
-  
-  .legend-toggle:hover {
-    background-color: #f9f9f9;
-    border-color: #ccc;
-  }
-  
-  .legend-toggle:active {
-    transform: scale(0.98);
-  }
-  
-  /* Legend overlay styles */
-  .legend-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 60px; /* Height of bottom bar */
-    background-color: rgba(255, 255, 255, 0.95);
-    z-index: 2000;
-    overflow-y: auto;
-    padding: 20px;
-    box-sizing: border-box;
-  }
-  
-  .legend-content {
-    max-width: 800px;
-    margin: 0 auto;
+  /* Mobile legend content styles */
+  .legend-content-mobile {
+    width: 100%;
     background-color: white;
     border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    padding: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    flex: 1;
+    min-height: 100px;
   }
   
-  .legend-content h3 {
+  .legend-content-mobile h3 {
     color: #333;
-    font-size: 1.2rem;
-    margin-bottom: 15px;
+    font-size: 1.1rem;
+    margin-bottom: 12px;
     border-bottom: 2px solid #4CAF50;
     padding-bottom: 8px;
   }
   
   .legend-scrollable {
-    max-height: calc(100vh - 200px);
-    overflow-y: auto;
-    padding-right: 8px;
-  }
-  
-  .close-legend {
-    display: block;
-    margin: 15px auto 0;
-    padding: 8px 16px;
-    background-color: #4CAF50;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 1rem;
-    transition: background-color 0.2s;
-  }
-  
-  .close-legend:hover {
-    background-color: #45a049;
+    max-height: none; /* Let the parent handle scrolling */
+    overflow-y: visible; /* No separate scrolling */
   }
   
   /* Adjust map container based on layout */
@@ -519,10 +518,12 @@
   
   /* Responsive adjustments */
   @media (max-width: 480px) {
-    .bottom-bar {
-      flex-direction: column;
-      align-items: stretch;
+    .bottom-bar-fixed {
       padding: 8px 12px;
+    }
+    
+    .bottom-scrollable-content {
+      padding: 0 12px 12px;
     }
     
     .month-selector {
@@ -530,18 +531,8 @@
       width: 100%;
     }
     
-    .legend-toggle {
-      width: 100%;
-      justify-content: center;
-    }
-    
-    .legend-overlay {
-      bottom: 80px; /* Adjust for potentially taller bottom bar */
-      padding: 15px;
-    }
-    
-    .legend-content {
-      padding: 15px;
+    .legend-content-mobile {
+      padding: 12px;
     }
   }
 </style>

@@ -69,7 +69,9 @@
             const coordinates = e.lngLat;
             
             const popupContent = `
-              <b>Species: ${feature.properties.tree_species || 'Unknown'}</b>
+              <div style="color: #333; background: #fff; padding: 8px; border-radius: 4px;">
+                <b>Species: ${feature.properties.tree_species || 'Unknown'}</b>
+              </div>
             `;
             
             new Popup()
@@ -113,20 +115,29 @@
   }
   
   onMount(() => {
-    console.log('MapView: onMount called');
-    
-    // Initialize MapLibre GL map with OpenFreeMap positron style
+    // Initialize MapLibre GL map with OpenFreeMap dark style
     map = new Map({
       container: mapContainer,
-      style: 'https://tiles.openfreemap.org/styles/positron',
+      style: 'https://tiles.openfreemap.org/styles/dark',
       center: [77.5946, 12.9716], // Bengaluru coordinates [lng, lat]
       zoom: 12
     });
     
-    console.log('MapView: Map initialized');
-    
     // Add navigation controls
     map.addControl(new NavigationControl(), 'top-right');
+    
+    // Handle window resize events to ensure map resizes properly
+    const handleResize = () => {
+      if (map) {
+        map.resize();
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    onDestroy(() => {
+      window.removeEventListener('resize', handleResize);
+    });
     
     // Wait for the map to be idle (style loaded and ready)
     map.on('idle', () => {
@@ -180,17 +191,37 @@
   
   // Expose update function to parent
   export function updateData(newData: GeoJSON.FeatureCollection | null) {
-    console.log('MapView: updateData called with', newData?.features?.length || 0, 'features');
+    // Performance optimization: Quick check for null/undefined
+    if (!newData) {
+      if (geojsonData !== null) {
+        geojsonData = null;
+        updateGeoJSONLayer();
+      }
+      return;
+    }
     
-    // Only update if data actually changed
-    const newDataString = JSON.stringify(newData);
-    if (newDataString !== previousDataString) {
-      console.log('MapView: Data changed, updating map');
+    // Performance optimization: Quick length check first
+    const newLength = newData.features?.length || 0;
+    const currentLength = geojsonData?.features?.length || 0;
+    
+    // Only do expensive comparison if lengths are different or we don't have previous data
+    if (newLength !== currentLength || !previousDataString) {
       geojsonData = newData;
-      previousDataString = newDataString;
+      previousDataString = `length:${newLength}`; // Simple cache key
       updateGeoJSONLayer();
-    } else {
-      console.log('MapView: Data unchanged, skipping update');
+    }
+    // For same length, do a lightweight check on first feature
+    else if (newLength > 0 && geojsonData?.features?.[0] !== newData.features?.[0]) {
+      geojsonData = newData;
+      previousDataString = `length:${newLength}:${Date.now()}`; // Simple cache key with timestamp
+      updateGeoJSONLayer();
+    }
+  }
+  
+  // Expose resize function to parent
+  export function resizeMap() {
+    if (map) {
+      map.resize();
     }
   }
   
