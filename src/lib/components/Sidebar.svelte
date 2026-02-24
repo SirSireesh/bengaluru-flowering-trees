@@ -139,38 +139,32 @@
   <div class="info-panel">
     <h3>Legend</h3>
     {#if treeSpeciesLegend.length > 0}
-      <div style="font-size: 0.8em; color: #666; margin-bottom: 8px;">
+      <div style="font-size: 0.8em; color: #666; margin-bottom: 4px;">
         Showing {treeSpeciesLegend.length} tree species
       </div>
-      {#each treeSpeciesLegend as item}
-        <div class="legend-item">
-          <div class="color-box" style="background-color: {item.color};"></div>
-          <span>{item.species}</span>
-        </div>
-      {/each}
+      <div class="legend-table-container">
+        <table class="legend-table">
+          <thead>
+            <tr>
+              <th scope="col">Color</th>
+              <th scope="col">Species</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each treeSpeciesLegend as item}
+              <tr>
+                <td>
+                  <div class="color-box" style="background-color: {item.color};"></div>
+                </td>
+                <td>{item.species}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
     {:else}
       <div style="font-size: 0.8em; color: #666; margin-bottom: 8px;">
-        No tree species data available - showing default colors
-      </div>
-      <div class="legend-item">
-        <div class="color-box" style="background-color: #ff69b4;"></div>
-        <span>Pink</span>
-      </div>
-      <div class="legend-item">
-        <div class="color-box" style="background-color: #fff000;"></div>
-        <span>Yellow</span>
-      </div>
-      <div class="legend-item">
-        <div class="color-box" style="background-color: #f8f8ff;"></div>
-        <span>White</span>
-      </div>
-      <div class="legend-item">
-        <div class="color-box" style="background-color: #800000;"></div>
-        <span>Red</span>
-      </div>
-      <div class="legend-item">
-        <div class="color-box" style="background-color: #ffa500;"></div>
-        <span>Orange</span>
+        No tree species data available
       </div>
     {/if}
   </div>
@@ -214,8 +208,8 @@
   }
   
   .info-panel {
-    margin-top: 20px;
-    padding: 15px;
+    margin-top: 0;
+    padding: 8px;
     background-color: white;
     border-radius: 5px;
     border: 1px solid #eee;
@@ -248,8 +242,8 @@
   
   h3 {
     color: #444;
-    font-size: 1.1rem;
-    margin-bottom: 15px;
+    font-size: 1rem;
+    margin-bottom: 6px;
   }
   
 
@@ -262,19 +256,53 @@
     border-radius: 3px;
   }
 
-  .legend-item span {
-    color: #444;
-    font-size: 0.85rem;
-    line-height: 1.3;
-    max-width: 180px;
-    word-wrap: break-word;
+  .legend-table-container {
+    max-height: 400px;
+    overflow-y: auto;
+    margin-top: 4px;
   }
-  
-  .legend-item {
-    display: flex;
-    align-items: center;
-    margin-bottom: 8px;
-    min-height: 24px;
+
+  .legend-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+
+  .legend-table th {
+    text-align: left;
+    padding: 4px 3px;
+    background-color: #f9f9f9;
+    border-bottom: 1px solid #ddd;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .legend-table td {
+    padding: 3px 3px;
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+  }
+
+  .legend-table tr:hover {
+    background-color: #f5f5f5;
+  }
+
+  .legend-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .legend-table .color-box {
+    width: 16px;
+    height: 16px;
+    margin: 0 auto;
+    border: 1px solid #ccc;
+    border-radius: 2px;
+  }
+
+  .legend-table td:last-child {
+    color: #444;
+    line-height: 1.3;
+    word-wrap: break-word;
   }
 
   .month-selector {

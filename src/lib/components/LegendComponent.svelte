@@ -79,35 +79,29 @@
     <div class="legend-info">
       Showing {treeSpeciesLegend.length} tree species
     </div>
-    {#each treeSpeciesLegend as item}
-      <div class="legend-item">
-        <div class="color-box" style="background-color: {item.color};"></div>
-        <span class="species-name">{item.species}</span>
-      </div>
-    {/each}
+    <div class="legend-table-container">
+      <table class="legend-table">
+        <thead>
+          <tr>
+            <th scope="col">Color</th>
+            <th scope="col">Species</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each treeSpeciesLegend as item}
+            <tr>
+              <td>
+                <div class="color-box" style="background-color: {item.color};"></div>
+              </td>
+              <td>{item.species}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
   {:else}
     <div class="legend-info">
-      No tree species data available - showing default colors
-    </div>
-    <div class="legend-item">
-      <div class="color-box" style="background-color: #ff69b4;"></div>
-      <span class="species-name">Pink</span>
-    </div>
-    <div class="legend-item">
-      <div class="color-box" style="background-color: #fff000;"></div>
-      <span class="species-name">Yellow</span>
-    </div>
-    <div class="legend-item">
-      <div class="color-box" style="background-color: #f8f8ff;"></div>
-      <span class="species-name">White</span>
-    </div>
-    <div class="legend-item">
-      <div class="color-box" style="background-color: #800000;"></div>
-      <span class="species-name">Red</span>
-    </div>
-    <div class="legend-item">
-      <div class="color-box" style="background-color: #ffa500;"></div>
-      <span class="species-name">Orange</span>
+      No tree species data available
     </div>
   {/if}
 
@@ -143,28 +137,53 @@
     font-style: italic;
   }
 
-  .legend-item {
-    display: flex;
-    align-items: center;
-    margin-bottom: 8px;
-    min-height: 24px;
+  .legend-table-container {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 4px;
   }
 
-  .color-box {
+  .legend-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+
+  .legend-table th {
+    text-align: left;
+    padding: 8px 6px;
+    background-color: #f9f9f9;
+    border-bottom: 2px solid #ddd;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .legend-table td {
+    padding: 6px 6px;
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+  }
+
+  .legend-table tr:hover {
+    background-color: #f5f5f5;
+  }
+
+  .legend-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .legend-table .color-box {
     width: 20px;
     height: 20px;
-    margin-right: 10px;
+    margin: 0 auto;
     border: 1px solid #ccc;
     border-radius: 3px;
-    flex-shrink: 0;
   }
 
-  .species-name {
+  .legend-table td:last-child {
     color: #444;
-    font-size: 0.85rem;
     line-height: 1.3;
     word-wrap: break-word;
-    flex: 1;
   }
 
   .sources-section {
