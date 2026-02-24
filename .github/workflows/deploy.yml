@@ -34,6 +34,9 @@ jobs:
         with:
           python-version: '3.14'
 
+      - name: Create datasets directory
+        run: mkdir -p scripts/datasets/blr-tree-census
+
       - name: Cache source data
         id: cache-data
         uses: actions/cache@v3
@@ -42,6 +45,24 @@ jobs:
             public/tree_species.parquet
             scripts/datasets/blr-tree-census/bbmp_tree_census_july2025.kml
           key: source-data-v1-${{ hashFiles('public/tree_species.parquet') }}
+
+      - name: Download tree census data
+        if: steps.cache-data.outputs.cache-hit != 'true'
+        run: |
+          echo "Cache miss, downloading tree census data..."
+          curl -L -o scripts/datasets/blr-tree-census/temp.kmz "https://data.opencity.in/dataset/9151032e-4423-4697-81a2-e29018a4facd/resource/44623cd8-b167-4c02-bff1-5120e37beabc/download/8128cdd5-579d-428a-a464-d4578069f296.kmz"
+          # Extract KML from KMZ (KMZ is just a ZIP file)
+          unzip -o scripts/datasets/blr-tree-census/temp.kmz -d scripts/datasets/blr-tree-census/
+          # Find the main KML file and rename it
+          KML_FILE=$(find scripts/datasets/blr-tree-census -name "*.kml" | head -1)
+          if [ -n "$KML_FILE" ]; then
+            mv "$KML_FILE" scripts/datasets/blr-tree-census/bbmp_tree_census_july2025.kml
+            echo "Successfully extracted KML file"
+          else
+            echo "Error: No KML file found in the KMZ archive"
+            exit 1
+          fi
+          rm scripts/datasets/blr-tree-census/temp.kmz
 
       - name: Install Python dependencies
         run: pip install -r scripts/requirements.txt
