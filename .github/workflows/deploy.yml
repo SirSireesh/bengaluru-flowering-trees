@@ -71,13 +71,29 @@ jobs:
         run: pip install -r scripts/requirements.txt
 
       - name: Generate GeoJSON files
-        run: python scripts/tree_census_points_generator.py --tree-census-data scripts/datasets/blr-tree-census/bbmp_tree_census_july2025.kml --tree-bloom-data public/tree_species.parquet --output-dir public/geojson
+        run: |
+          python scripts/tree_census_points_generator.py --tree-census-data scripts/datasets/blr-tree-census/bbmp_tree_census_july2025.kml --tree-bloom-data public/tree_species.parquet --output-dir public/geojson
+          echo "=== Files in public/geojson after Python step ==="
+          ls -la public/geojson/ | head -20
 
       - name: Install Node dependencies
         run: npm install
 
+      - name: Compress GeoJSON files
+        run: |
+          echo "=== Files in public/geojson before compression ==="
+          ls -la public/geojson/ | head -20
+          npm run compress-geojson
+          echo "=== Files in public/geojson after compression ==="
+          ls -la public/geojson/ | grep "\.gz$" || echo "No .gz files found"
+
       - name: Build
-        run: npm run build
+        run: |
+          npm run build
+          echo "=== Files in dist/geojson after build ==="
+          ls -la dist/geojson/ | head -20
+          echo "=== .gz files in dist/geojson ==="
+          ls -la dist/geojson/*.gz 2>/dev/null || echo "No .gz files in dist/geojson/"
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
