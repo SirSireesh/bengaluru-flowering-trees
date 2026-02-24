@@ -139,9 +139,10 @@
     }
     
     try {
-      // Load the compressed GeoJSON file for the selected month (use uppercase month names)
+      // Load the GeoJSON file for the selected month (use uppercase month names)
+      // GitHub Pages will automatically compress the response with gzip
       const monthUpper = month.toUpperCase();
-      const filename = `trees_${monthUpper}.geojson.gz`;
+      const filename = `trees_${monthUpper}.geojson`;
       
       const response = await fetch(`/geojson/${filename}`);
       
