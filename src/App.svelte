@@ -3,6 +3,7 @@
   import Sidebar from './lib/components/Sidebar.svelte';
   import MapView from './lib/components/MapView.svelte';
   import LegendComponent from './lib/components/LegendComponent.svelte';
+
   
   let geojsonData: GeoJSON.FeatureCollection | null = null;
   let isLoading: boolean = true;
@@ -12,13 +13,12 @@
   let isMobile: boolean = false;
   
   interface GeoJSONFeatureProperties {
-    h3_index: string;
-    colour_hex: string;
-    color_name: string;
+    TreeName: string;
+    months: string;
+    colour: string;
     prominence: string;
-    month: string;
-    resolution: number;
-    tree_species?: string[];
+    months_flowering: Record<string, boolean>;
+    [month: string]: boolean | string | Record<string, boolean>; // Dynamic month properties
   }
   
   const months = [
@@ -139,8 +139,10 @@
     }
     
     try {
-      // Load the GeoJSON file for the selected month
-      const filename = `h3_tree_distribution_${month}_resolution_10.geojson`;
+      // Load the compressed GeoJSON file for the selected month (use uppercase month names)
+      const monthUpper = month.toUpperCase();
+      const filename = `trees_${monthUpper}.geojson.gz`;
+      
       const response = await fetch(`/geojson/${filename}`);
       
       if (!response.ok) {
@@ -162,17 +164,11 @@
       console.error('Error loading GeoJSON:', err);
       error = `Failed to load ${month} data. Please make sure the GeoJSON file exists.`;
       
-      // Create a mock GeoJSON for demonstration purposes
-      const mockData = createMockGeoJSON();
-      
-      // Update the map view with mock data
+      // Clear any existing data
+      geojsonData = null;
       if (mapViewRef && typeof mapViewRef.updateData === 'function') {
-        mapViewRef.updateData(mockData);
+        mapViewRef.updateData(null);
       }
-      
-      // Update geojsonData with mock data for display
-      geojsonData = mockData;
-      lastLoadedMonth = month;
     } finally {
       isLoading = false;
     }
@@ -183,56 +179,7 @@
     loadGeoJSONData(selectedMonth);
   }
   
-  function createMockGeoJSON(): GeoJSON.FeatureCollection<GeoJSON.Polygon, GeoJSONFeatureProperties> {
-    // Create a simple mock GeoJSON with some sample data around Bangalore
-    return {
-      "type": "FeatureCollection",
-      "features": [
-        {
-          "type": "Feature",
-          "properties": {
-            "h3_index": "8b123456789abcdef",
-            "colour_hex": "#ff69b4",
-            "color_name": "pink",
-            "prominence": "blended",
-            "month": selectedMonth,
-            "resolution": 10
-          },
-          "geometry": {
-            "type": "Polygon",
-            "coordinates": [[
-              [77.59, 12.97],
-              [77.60, 12.97],
-              [77.60, 12.98],
-              [77.59, 12.98],
-              [77.59, 12.97]
-            ]]
-          }
-        },
-        {
-          "type": "Feature",
-          "properties": {
-            "h3_index": "8b123456789abcdef",
-            "colour_hex": "#fff000",
-            "color_name": "yellow",
-            "prominence": "blended",
-            "month": selectedMonth,
-            "resolution": 10
-          },
-          "geometry": {
-            "type": "Polygon",
-            "coordinates": [[
-              [77.58, 12.96],
-              [77.59, 12.96],
-              [77.59, 12.97],
-              [77.58, 12.97],
-              [77.58, 12.96]
-            ]]
-          }
-        }
-      ]
-    };
-  }
+
 </script>
 
 <div class="app-container">

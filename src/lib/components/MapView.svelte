@@ -11,13 +11,12 @@
   let layerId: string = 'tree-data-layer';
   
   interface GeoJSONFeatureProperties {
-    h3_index: string;
-    colour_hex: string;
-    color_name: string;
+    TreeName: string;
+    months: string;
+    colour: string;
     prominence: string;
-    month: string;
-    resolution: number;
-    tree_species?: string[];
+    months_flowering: Record<string, boolean>;
+    [month: string]: boolean | string | Record<string, boolean>; // Dynamic month properties
   }
   
   // Create the initial layer
@@ -27,41 +26,33 @@
       try {
         map.addLayer({
           id: layerId,
-          type: 'fill',
+          type: 'circle',
           source: sourceId,
           layout: {
             visibility: 'visible'
           },
           paint: {
-            'fill-color': [
+            'circle-color': [
               'case',
-              ['has', 'colour_hex'],
-              ['get', 'colour_hex'],
+              ['has', 'colour'],
+              ['get', 'colour'],
               '#cccccc'
             ],
-            'fill-opacity': 0.8,
-            'fill-outline-color': '#ffffff'
+            'circle-radius': 6,
+            'circle-opacity': 0.8,
+            'circle-stroke-width': 1,
+            'circle-stroke-color': '#ffffff'
           }
         });
       } catch (error) {
-        console.error(`MapView: Failed to add fill layer:`, error);
+        console.error(`MapView: Failed to add circle layer:`, error);
       }
-      
-      map.addLayer({
-        id: `${layerId}-outline`,
-        type: 'line',
-        source: sourceId,
-        paint: {
-          'line-color': '#ffffff',
-          'line-width': 0.5
-        }
-      });
       
       // Add event handlers only if they haven't been added yet
       if (!map._popupHandlerAdded) {
         map.on('click', layerId, (e) => {
           const features = map.queryRenderedFeatures(e.point, {
-            layers: [layerId, `${layerId}-outline`]
+            layers: [layerId]
           });
           
           if (features.length > 0) {
@@ -70,7 +61,8 @@
             
             const popupContent = `
               <div style="color: #333; background: #fff; padding: 8px; border-radius: 4px;">
-                <b>Species: ${feature.properties.tree_species || 'Unknown'}</b>
+                <b>Species: ${feature.properties.TreeName || 'Unknown'}</b><br>
+                <small>Flowering: ${feature.properties.months || 'Unknown'}</small>
               </div>
             `;
             
@@ -85,14 +77,8 @@
         map.on('mouseenter', layerId, () => {
           map.getCanvas().style.cursor = 'pointer';
         });
-        map.on('mouseenter', `${layerId}-outline`, () => {
-          map.getCanvas().style.cursor = 'pointer';
-        });
         
         map.on('mouseleave', layerId, () => {
-          map.getCanvas().style.cursor = '';
-        });
-        map.on('mouseleave', `${layerId}-outline`, () => {
           map.getCanvas().style.cursor = '';
         });
         
@@ -103,10 +89,9 @@
       if (geojsonData && geojsonData.features && geojsonData.features.length > 0) {
         const bounds = new LngLatBounds();
         geojsonData.features.forEach(feature => {
-          if (feature.geometry.type === 'Polygon') {
-            feature.geometry.coordinates[0].forEach(coord => {
-              bounds.extend([coord[0], coord[1]]);
-            });
+          if (feature.geometry.type === 'Point') {
+            const coordinates = feature.geometry.coordinates;
+            bounds.extend([coordinates[0], coordinates[1]]);
           }
         });
         map.fitBounds(bounds, { padding: 50 });
@@ -171,10 +156,9 @@
           if (geojsonData && geojsonData.features && geojsonData.features.length > 0) {
             const bounds = new LngLatBounds();
             geojsonData.features.forEach(feature => {
-              if (feature.geometry.type === 'Polygon') {
-                feature.geometry.coordinates[0].forEach(coord => {
-                  bounds.extend([coord[0], coord[1]]);
-                });
+              if (feature.geometry.type === 'Point') {
+                const coordinates = feature.geometry.coordinates;
+                bounds.extend([coordinates[0], coordinates[1]]);
               }
             });
             map.fitBounds(bounds, { padding: 50 });

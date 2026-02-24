@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run compress-geojson && vite build",
     "preview": "vite preview",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "compress-geojson": "find public/geojson -name '*.geojson' -exec gzip -k -9 {} \\;"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^6.2.1",

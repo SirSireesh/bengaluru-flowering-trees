@@ -14,6 +14,9 @@ lerna-debug.log*
 
 node_modules
 dist
+# Generated GeoJSON files (large, generated during build)
+public/geojson/*.geojson
+public/geojson/*.geojson.gz
 dist-ssr
 *.local
 

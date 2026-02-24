@@ -14,13 +14,12 @@
   let treeSpeciesLegend: Array<{ species: string; color: string }> = [];
   
   interface GeoJSONFeatureProperties {
-    h3_index: string;
-    colour_hex: string;
-    color_name: string;
+    TreeName: string;
+    months: string;
+    colour: string;
     prominence: string;
-    month: string;
-    resolution: number;
-    tree_species?: string[];
+    months_flowering: Record<string, boolean>;
+    [month: string]: boolean | string | Record<string, boolean>; // Dynamic month properties
   }
   
   const months = [
@@ -58,13 +57,8 @@
       const feature = geojsonData.features[i];
       if (feature && feature.properties) {
         const properties = feature.properties as GeoJSONFeatureProperties;
-        if (properties.tree_species && Array.isArray(properties.tree_species)) {
-          for (let j = 0; j < properties.tree_species.length; j++) {
-            const species = properties.tree_species[j];
-            if (species && typeof species === 'string' && species.trim()) {
-              speciesSet.add(species);
-            }
-          }
+        if (properties.TreeName && typeof properties.TreeName === 'string' && properties.TreeName.trim()) {
+          speciesSet.add(properties.TreeName);
         }
       }
     }

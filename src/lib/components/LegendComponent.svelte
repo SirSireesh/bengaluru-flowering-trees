@@ -3,13 +3,12 @@
   export let treeSpeciesColors: Map<string, string> = new Map();
 
   interface GeoJSONFeatureProperties {
-    h3_index: string;
-    colour_hex: string;
-    color_name: string;
+    TreeName: string;
+    months: string;
+    colour: string;
     prominence: string;
-    month: string;
-    resolution: number;
-    tree_species?: string[];
+    months_flowering: Record<string, boolean>;
+    [month: string]: boolean | string | Record<string, boolean>; // Dynamic month properties
   }
 
   function getTreeSpeciesLegend(): Array<{ species: string; color: string }> {
@@ -24,13 +23,9 @@
       if (feature && feature.properties) {
         const properties = feature.properties as GeoJSONFeatureProperties;
 
-        // Check if tree_species exists and is an array with at least one element
-        if (properties.tree_species && Array.isArray(properties.tree_species) && properties.tree_species.length > 0) {
-          properties.tree_species.forEach(species => {
-            if (species && typeof species === 'string' && species.trim()) {
-              speciesSet.add(species);
-            }
-          });
+        // Use TreeName property instead of tree_species array
+        if (properties.TreeName && typeof properties.TreeName === 'string' && properties.TreeName.trim()) {
+          speciesSet.add(properties.TreeName);
         }
       }
     });

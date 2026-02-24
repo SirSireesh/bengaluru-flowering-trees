@@ -29,7 +29,30 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.14'
+
+      - name: Cache source data
+        id: cache-data
+        uses: actions/cache@v3
+        with:
+          path: |
+            public/tree_species.parquet
+            scripts/datasets/blr-tree-census/bbmp_tree_census_july2025.kml
+          key: source-data-v1-${{ hashFiles('public/tree_species.parquet') }}
+
+      - name: Install Python dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Generate GeoJSON files
+        run: python scripts/tree_census_points_generator.py \
+          --tree-census-data scripts/datasets/blr-tree-census/bbmp_tree_census_july2025.kml \
+          --tree-bloom-data public/tree_species.parquet \
+          --output-dir public/geojson
+
+      - name: Install Node dependencies
         run: npm install
 
       - name: Build
