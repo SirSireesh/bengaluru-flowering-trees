@@ -47,10 +47,7 @@ jobs:
         run: pip install -r scripts/requirements.txt
 
       - name: Generate GeoJSON files
-        run: python scripts/tree_census_points_generator.py \
-          --tree-census-data scripts/datasets/blr-tree-census/bbmp_tree_census_july2025.kml \
-          --tree-bloom-data public/tree_species.parquet \
-          --output-dir public/geojson
+        run: python scripts/tree_census_points_generator.py --tree-census-data scripts/datasets/blr-tree-census/bbmp_tree_census_july2025.kml --tree-bloom-data public/tree_species.parquet --output-dir public/geojson
 
       - name: Install Node dependencies
         run: npm install
