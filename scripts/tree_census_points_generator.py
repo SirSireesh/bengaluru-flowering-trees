@@ -56,9 +56,11 @@ def main():
     tree_census["months_flowering"] = tree_census["months"].apply(convert_text_range_to_months)
     tree_census = tree_census.join(tree_census["months_flowering"].apply(pd.Series))
     print(tree_census)
-    return
+    
+    # Write all trees data
     tree_census[["TreeName", "colour", "prominence", "geometry"]].to_file(Path(args.output_dir) / "trees_all.geojson")
 
+    # Write monthly files
     for month in MONTHS:
         month_data = tree_census.loc[tree_census[month]]
         month_data.set_crs(epsg=4326)
