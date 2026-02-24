@@ -100,12 +100,20 @@
   }
   
   onMount(() => {
-    // Initialize MapLibre GL map with OpenFreeMap dark style
+    const bengaluruBounds = new LngLatBounds(
+      [77.45, 12.80], // Southwest corner
+      [77.80, 13.15]  // Northeast corner
+    );
+
+    // Initialize MapLibre GL map with OpenFreeMap
     map = new Map({
       container: mapContainer,
       style: 'https://tiles.openfreemap.org/styles/positron',
       center: [77.5946, 12.9716], // Bengaluru coordinates [lng, lat]
-      zoom: 12
+      zoom: 12,
+      maxBounds: bengaluruBounds, // Restrict viewport to Bengaluru
+      maxZoom: 18,
+      minZoom: 10
     });
     
     // Add navigation controls
