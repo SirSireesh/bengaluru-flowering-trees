@@ -3,12 +3,13 @@
   import Sidebar from './lib/components/Sidebar.svelte';
   import MapView from './lib/components/MapView.svelte';
   import LegendComponent from './lib/components/LegendComponent.svelte';
+  import { getCurrentMonthAbbreviation, getMonthFullName } from './utils/dateUtils';
 
   
   let geojsonData: GeoJSON.FeatureCollection | null = null;
   let isLoading: boolean = true;
   let error: string | null = null;
-  let selectedMonth: string = 'Feb';
+  let selectedMonth: string = 'Feb'; // Will be updated in onMount
   let treeSpeciesColors: Map<string, string> = new Map();
   let isMobile: boolean = false;
   
@@ -37,6 +38,9 @@
   ];
   
   onMount(async () => {
+    // Set the current month as the selected month
+    selectedMonth = getCurrentMonthAbbreviation();
+    
     // Check if we're on a mobile device
     function checkMobile() {
       const wasMobile = isMobile;
@@ -199,17 +203,7 @@
       {#if isLoading}
         <div class="loading-overlay">
           <div class="loading-spinner"></div>
-          <p>Loading {selectedMonth === 'Jan' ? 'January' : 
-                     selectedMonth === 'Feb' ? 'February' : 
-                     selectedMonth === 'Mar' ? 'March' : 
-                     selectedMonth === 'Apr' ? 'April' : 
-                     selectedMonth === 'May' ? 'May' : 
-                     selectedMonth === 'Jun' ? 'June' : 
-                     selectedMonth === 'Jul' ? 'July' : 
-                     selectedMonth === 'Aug' ? 'August' : 
-                     selectedMonth === 'Sep' ? 'September' : 
-                     selectedMonth === 'Oct' ? 'October' : 
-                     selectedMonth === 'Nov' ? 'November' : 'December'} data...</p>
+          <p>Loading {getMonthFullName(selectedMonth)} data...</p>
         </div>
       {/if}
       

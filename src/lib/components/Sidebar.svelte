@@ -1,7 +1,8 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { getCurrentMonthAbbreviation } from '../../utils/dateUtils';
   
-  export let selectedMonth: string = 'Feb';
+  export let selectedMonth: string = getCurrentMonthAbbreviation();
   export let geojsonData: GeoJSON.FeatureCollection | null = null;
   export let treeSpeciesColors: Map<string, string> = new Map();
   
