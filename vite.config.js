@@ -12,7 +12,9 @@ export default defineConfig({
         { src: 'public/geojson/*.geojson.gz', dest: 'dist/geojson' },
         { src: 'public/tree_species.parquet', dest: 'dist' },
         { src: 'public/tree_species_colors.json', dest: 'dist' },
-        { src: 'public/vite.svg', dest: 'dist' }
+        { src: 'public/vite.svg', dest: 'dist' },
+        { src: 'src/utils/h3ClusteringWorker.ts', dest: 'dist/assets' },
+        { src: 'src/utils/dataLoaderWorker.ts', dest: 'dist/assets' }
       ],
       hook: 'writeBundle'
     })

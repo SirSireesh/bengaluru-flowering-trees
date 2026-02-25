@@ -2,7 +2,10 @@
   import { onMount, onDestroy } from 'svelte';
   import { Map, NavigationControl, Popup, LngLatBounds } from 'maplibre-gl';
   import 'maplibre-gl/dist/maplibre-gl.css';
-  import { createTreeClusters, getOptimalResolution, shouldUseClusters } from '../../utils/h3Clustering';
+  import { getOptimalResolution, shouldUseClusters } from '../../utils/h3Clustering';
+  import { createClusteringWorker, computeClustersInWorker } from '../../utils/workerLoader';
+
+  let clusteringWorker: Worker | null = null;
   
   export let geojsonData: GeoJSON.FeatureCollection | null = null;
   
@@ -201,6 +204,9 @@
   }
   
   onMount(() => {
+    // Initialize clustering worker
+    clusteringWorker = createClusteringWorker();
+    
     const bengaluruBounds = new LngLatBounds(
       [77.45, 12.80], // Southwest corner
       [77.80, 13.15]  // Northeast corner
@@ -234,7 +240,7 @@
     });
     
     // Wait for the map to be idle (style loaded and ready)
-    map.on('idle', () => {
+    map.on('idle', async () => {
       // Only add source if it doesn't already exist
       if (!map.getSource(sourceId)) {
         map.addSource(sourceId, {
@@ -264,19 +270,22 @@
       
       // Initialize clusters if we have data
       if (geojsonData && geojsonData.features && geojsonData.features.length > 0) {
-        updateClusters();
-        updateClusterLayer();
-        updateLayerVisibility();
+        // Wrap in async function to avoid Svelte compiler issues
+        (async () => {
+          await updateClusters();
+          updateClusterLayer();
+          updateLayerVisibility();
+        })();
       }
     });
     
     // Handle zoom events to update clusters
-    map.on('zoom', () => {
+    map.on('zoom', async () => {
       if (map) {
         const newZoomLevel = Math.round(map.getZoom());
         if (newZoomLevel !== currentZoomLevel) {
           currentZoomLevel = newZoomLevel;
-          updateClusters();
+          await updateClusters();
           updateClusterLayer();
           updateLayerVisibility();
         }
@@ -333,21 +342,35 @@
   let previousDataString: string | null = null;
   let previousZoomLevel: number | null = null;
   
-  function updateClusters() {
+  async function updateClusters() {
     if (!geojsonData || !geojsonData.features || geojsonData.features.length === 0) {
       clusterData = null;
       return;
     }
     
-    // Create clusters based on current zoom level
+    // Create clusters based on current zoom level using worker
     const resolution = getOptimalResolution(currentZoomLevel);
-    clusterData = createTreeClusters(geojsonData.features as any, resolution);
+    
+    if (clusteringWorker) {
+      try {
+        clusterData = await computeClustersInWorker(clusteringWorker, geojsonData.features as any, resolution);
+      } catch (error) {
+        console.error('Error computing clusters in worker:', error);
+        // Fallback to synchronous clustering if worker fails
+        const { createTreeClusters } = await import('../../utils/h3Clustering');
+        clusterData = createTreeClusters(geojsonData.features as any, resolution);
+      }
+    } else {
+      // Fallback to synchronous clustering if worker not available
+      const { createTreeClusters } = await import('../../utils/h3Clustering');
+      clusterData = createTreeClusters(geojsonData.features as any, resolution);
+    }
     
 
   }
   
   // Expose update function to parent
-  export function updateData(newData: GeoJSON.FeatureCollection | null) {
+  export async function updateData(newData: GeoJSON.FeatureCollection | null) {
     // Performance optimization: Quick check for null/undefined
     if (!newData) {
       if (geojsonData !== null) {
@@ -375,7 +398,7 @@
     }
     
     // Update clusters after data changes
-    updateClusters();
+    await updateClusters();
   }
   
   // Update layer visibility based on zoom level

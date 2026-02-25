@@ -4,6 +4,7 @@
   import MapView from './lib/components/MapView.svelte';
   import LegendComponent from './lib/components/LegendComponent.svelte';
   import { getCurrentMonthAbbreviation, getMonthFullName } from './utils/dateUtils';
+  import { createDataLoaderWorker, loadGeoJSONInWorker } from './utils/workerLoader';
 
   
   let geojsonData: GeoJSON.FeatureCollection | null = null;
@@ -12,6 +13,7 @@
   let selectedMonth: string = 'Feb'; // Will be updated in onMount
   let treeSpeciesColors: Map<string, string> = new Map();
   let isMobile: boolean = false;
+  let dataLoaderWorker: Worker | null = null;
   
   interface GeoJSONFeatureProperties {
     TreeName: string;
@@ -70,6 +72,9 @@
     
     await loadTreeSpeciesColors();
     
+    // Initialize data loader worker
+    dataLoaderWorker = createDataLoaderWorker();
+
     // Small delay before loading data to ensure map is properly sized
     await new Promise(resolve => setTimeout(resolve, 100));
     
@@ -143,26 +148,44 @@
     }
     
     try {
-      // Load the GeoJSON file for the selected month (use uppercase month names)
-      // GitHub Pages will automatically compress the response with gzip
-      const monthUpper = month.toUpperCase();
-      const filename = `trees_${monthUpper}.geojson`;
-      
-      const response = await fetch(`/geojson/${filename}`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to load ${month} GeoJSON: ${response.status} ${response.statusText}`);
-      }
-      
-      const data: GeoJSON.FeatureCollection<GeoJSON.Geometry, GeoJSONFeatureProperties> = await response.json();
-      
-      // For different months, always update the data since flowering patterns change
-      geojsonData = data;
-      lastLoadedMonth = month;
-      
-      // Update the map view with the new data
-      if (mapViewRef && typeof mapViewRef.updateData === 'function') {
-        mapViewRef.updateData(data);
+      // Use worker for data loading if available
+      if (dataLoaderWorker) {
+        const result = await loadGeoJSONInWorker(dataLoaderWorker, month);
+        
+        if (result.error) {
+          throw new Error(result.error);
+        }
+        
+        if (result.data) {
+          geojsonData = result.data;
+          lastLoadedMonth = month;
+          
+          // Update the map view with the new data
+          if (mapViewRef && typeof mapViewRef.updateData === 'function') {
+            mapViewRef.updateData(result.data);
+          }
+        }
+      } else {
+        // Fallback to main thread loading if worker not available
+        const monthUpper = month.toUpperCase();
+        const filename = `trees_${monthUpper}.geojson`;
+        
+        const response = await fetch(`/geojson/${filename}`);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to load ${month} GeoJSON: ${response.status} ${response.statusText}`);
+        }
+        
+        const data: GeoJSON.FeatureCollection<GeoJSON.Geometry, GeoJSONFeatureProperties> = await response.json();
+        
+        // For different months, always update the data since flowering patterns change
+        geojsonData = data;
+        lastLoadedMonth = month;
+        
+        // Update the map view with the new data
+        if (mapViewRef && typeof mapViewRef.updateData === 'function') {
+          mapViewRef.updateData(data);
+        }
       }
       
     } catch (err) {
