@@ -2,22 +2,26 @@
   import { onMount, onDestroy } from 'svelte';
   import { Map, NavigationControl, Popup, LngLatBounds } from 'maplibre-gl';
   import 'maplibre-gl/dist/maplibre-gl.css';
-  import { getOptimalResolution, shouldUseClusters } from '../../utils/h3Clustering';
+  import { shouldUseClusters } from '../../utils/h3Clustering';
   import { createClusteringWorker, computeClustersInWorker } from '../../utils/workerLoader';
+  import { createTreeClusters } from '../../utils/h3Clustering';
 
   let clusteringWorker: Worker | null = null;
   
   export let geojsonData: GeoJSON.FeatureCollection | null = null;
   
   let currentZoomLevel: number = 12;
-  let clusterData: GeoJSON.FeatureCollection | null = null;
+  let clusterData10: GeoJSON.FeatureCollection | null = null;
+  let clusterData8: GeoJSON.FeatureCollection | null = null;
   
   let map: Map | null = null;
   let mapContainer: HTMLDivElement;
   let sourceId: string = 'tree-data-source';
   let layerId: string = 'tree-data-layer';
-  let clusterSourceId: string = 'tree-cluster-source';
-  let clusterLayerId: string = 'tree-cluster-layer';
+  let clusterSourceId10: string = 'tree-cluster-source-10';
+  let clusterLayerId10: string = 'tree-cluster-layer-10';
+  let clusterSourceId8: string = 'tree-cluster-source-8';
+  let clusterLayerId8: string = 'tree-cluster-layer-8';
   
   interface GeoJSONFeatureProperties {
     TreeName: string;
@@ -28,63 +32,91 @@
     [month: string]: boolean | string | Record<string, boolean>; // Dynamic month properties
   }
   
-  // Create the cluster layer
-  function createClusterLayer() {
-    if (map && map.getSource(clusterSourceId)) {
-      // Add the cluster layer
+  // Create cluster layers for different resolutions
+  function createClusterLayers() {
+    if (map) {
       try {
-        // Use fill layer for H3 cell polygons
-        map.addLayer({
-          id: clusterLayerId,
-          type: 'fill',
-          source: clusterSourceId,
-          layout: {
-            visibility: 'visible'
-          },
-          paint: {
-            'fill-color': [
-              'case',
-              ['has', 'dominantColor'],
-              ['get', 'dominantColor'],
-              '#81c784'  // Default green color
-            ],
-            'fill-opacity': 0.6,
-            'fill-antialias': true
-          }
-        });
-        
-        // Add outline for better visibility
-        map.addLayer({
-          id: `${clusterLayerId}-outline`,
-          type: 'line',
-          source: clusterSourceId,
-          layout: {
-            visibility: 'visible'
-          },
-          paint: {
-            'line-color': '#ffffff',
-            'line-width': 1,
-            'line-opacity': 0.8
-          }
-        });
-        
+        // Create resolution 10 cluster layer (zoom 14-15) - more detailed clusters
+        if (map.getSource(clusterSourceId10) && !map.getLayer(clusterLayerId10)) {
+          map.addLayer({
+            id: clusterLayerId10,
+            type: 'fill',
+            source: clusterSourceId10,
+            minzoom: 14,
+            maxzoom: 15,
+            layout: {
+              visibility: 'visible'
+            },
+            paint: {
+              'fill-color': [
+                'case',
+                ['has', 'dominantColor'],
+                ['get', 'dominantColor'],
+                '#81c784'  // Default green color
+              ],
+              'fill-opacity': 0.6,
+              'fill-antialias': true
+            }
+          });
 
-        
-        // Add event handlers for cluster popups
-        if (!map._clusterPopupHandlerAdded) {
-          map.on('click', clusterLayerId, (e) => {
-            const features = map.queryRenderedFeatures(e.point, {
-              layers: [clusterLayerId]
+        // Create resolution 8 cluster layer (zoom 10-13) - less detailed clusters
+        if (map.getSource(clusterSourceId8) && !map.getLayer(clusterLayerId8)) {
+          map.addLayer({
+            id: clusterLayerId8,
+            type: 'fill',
+            source: clusterSourceId8,
+            minzoom: 10,
+            maxzoom: 13,
+            layout: {
+              visibility: 'visible'
+            },
+            paint: {
+              'fill-color': [
+                'case',
+                ['has', 'dominantColor'],
+                ['get', 'dominantColor'],
+                '#81c784'  // Default green color
+              ],
+              'fill-opacity': 0.6,
+              'fill-antialias': true
+            }
+          });
+
+          // Add outline for resolution 8 clusters - only if it doesn't exist
+          if (!map.getLayer(`${clusterLayerId8}-outline`)) {
+            map.addLayer({
+              id: `${clusterLayerId8}-outline`,
+              type: 'line',
+              source: clusterSourceId8,
+              minzoom: 14,
+              maxzoom: 15,
+              layout: {
+                visibility: 'visible'
+              },
+              paint: {
+                'line-color': '#ffffff',
+                'line-width': 1,
+                'line-opacity': 0.8
+              }
             });
-            
+          }
+        }
+
+        // Add event handlers for cluster popups (shared between both cluster layers)
+        if (!map._clusterPopupHandlerAdded && map.getLayer(clusterLayerId10) && map.getLayer(clusterLayerId8)) {
+          const handleClusterClick = (e, layerId) => {
+            const features = map.queryRenderedFeatures(e.point, {
+              layers: [layerId]
+            });
+
             if (features.length > 0) {
               const feature = features[0];
               const coordinates = e.lngLat;
-              
+
               const count = feature.properties.count || 0;
               const dominantType = feature.properties.dominantType || 'Unknown';
               const treeTypes = feature.properties.treeTypes || {};
-              
+
               // Create a summary of tree types
               const typeSummary = Object.entries(treeTypes)
                 .slice(0, 5) // Show top 5 types
@@ -104,21 +136,28 @@
                 .setHTML(popupContent)
                 .addTo(map);
             }
-          });
+          };
+          
+          map.on('click', clusterLayerId10, (e) => handleClusterClick(e, clusterLayerId10));
+          map.on('click', clusterLayerId8, (e) => handleClusterClick(e, clusterLayerId8));
           
           // Change cursor to pointer when hovering over cluster features
-          map.on('mouseenter', clusterLayerId, () => {
-            map.getCanvas().style.cursor = 'pointer';
-          });
-          
-          map.on('mouseleave', clusterLayerId, () => {
-            map.getCanvas().style.cursor = '';
+          const clusterLayers = [clusterLayerId10, clusterLayerId8];
+          clusterLayers.forEach(layerId => {
+            map.on('mouseenter', layerId, () => {
+              map.getCanvas().style.cursor = 'pointer';
+            });
+            
+            map.on('mouseleave', layerId, () => {
+              map.getCanvas().style.cursor = '';
+            });
           });
           
           map._clusterPopupHandlerAdded = true;
         }
+      }
       } catch (error) {
-        console.error(`MapView: Failed to add cluster layer:`, error);
+        console.error(`MapView: Failed to add cluster layers:`, error);
       }
     }
   }
@@ -132,6 +171,7 @@
           id: layerId,
           type: 'circle',
           source: sourceId,
+          minzoom: 16,  // Only show individual points at zoom 16+
           layout: {
             visibility: 'visible'
           },
@@ -257,52 +297,62 @@
         }
       }
       
-      // Add cluster source if it doesn't exist
-      if (!map.getSource(clusterSourceId)) {
-        map.addSource(clusterSourceId, {
+      // Add cluster sources if they don't exist
+      if (!map.getSource(clusterSourceId10)) {
+        map.addSource(clusterSourceId10, {
           type: 'geojson',
-          data: clusterData || { type: 'FeatureCollection', features: [] }
+          data: clusterData10 || { type: 'FeatureCollection', features: [] }
         });
-        
-        // Create the cluster layer
-        createClusterLayer();
       }
+      
+      if (!map.getSource(clusterSourceId8)) {
+        map.addSource(clusterSourceId8, {
+          type: 'geojson',
+          data: clusterData8 || { type: 'FeatureCollection', features: [] }
+        });
+      }
+      
+      // Create the cluster layers
+      createClusterLayers();
       
       // Initialize clusters if we have data
       if (geojsonData && geojsonData.features && geojsonData.features.length > 0) {
         // Wrap in async function to avoid Svelte compiler issues
         (async () => {
           await updateClusters();
-          updateClusterLayer();
-          updateLayerVisibility();
         })();
       }
     });
     
-    // Handle zoom events to update clusters
+    // Handle zoom events - we don't need to manually update clusters anymore
+    // since MapLibre will handle layer visibility based on minzoom/maxzoom
     map.on('zoom', async () => {
       if (map) {
-        const newZoomLevel = Math.round(map.getZoom());
-        if (newZoomLevel !== currentZoomLevel) {
-          currentZoomLevel = newZoomLevel;
-          await updateClusters();
-          updateClusterLayer();
-          updateLayerVisibility();
-        }
+        currentZoomLevel = Math.round(map.getZoom());
       }
     });
   });
   
-  // Update the cluster layer when data changes
-  function updateClusterLayer() {
+  // Update the cluster layers when data changes
+  function updateClusterLayers() {
     if (map && map.isStyleLoaded()) {
-      // Simple approach: just update the source data if it exists
-      if (map.getSource(clusterSourceId)) {
+      // Update resolution 10 cluster source
+      if (map.getSource(clusterSourceId10)) {
         try {
-          const dataToSet = clusterData || { type: 'FeatureCollection', features: [] };
-          map.getSource(clusterSourceId).setData(dataToSet);
+          const dataToSet = clusterData10 || { type: 'FeatureCollection', features: [] };
+          map.getSource(clusterSourceId10).setData(dataToSet);
         } catch (error) {
-          console.error(`MapView: Error updating cluster source data:`, error);
+          console.error(`MapView: Error updating cluster source 10 data:`, error);
+        }
+      }
+      
+      // Update resolution 8 cluster source
+      if (map.getSource(clusterSourceId8)) {
+        try {
+          const dataToSet = clusterData8 || { type: 'FeatureCollection', features: [] };
+          map.getSource(clusterSourceId8).setData(dataToSet);
+        } catch (error) {
+          console.error(`MapView: Error updating cluster source 8 data:`, error);
         }
       }
     }
@@ -333,8 +383,7 @@
       }
       
       // Also update cluster data
-      updateClusterLayer();
-      updateLayerVisibility();
+      updateClusterLayers();
     }
   }
   
@@ -344,29 +393,24 @@
   
   async function updateClusters() {
     if (!geojsonData || !geojsonData.features || geojsonData.features.length === 0) {
-      clusterData = null;
+      clusterData10 = null;
+      clusterData8 = null;
       return;
     }
     
-    // Create clusters based on current zoom level using worker
-    const resolution = getOptimalResolution(currentZoomLevel);
-    
-    if (clusteringWorker) {
-      try {
-        clusterData = await computeClustersInWorker(clusteringWorker, geojsonData.features as any, resolution);
-      } catch (error) {
-        console.error('Error computing clusters in worker:', error);
-        // Fallback to synchronous clustering if worker fails
-        const { createTreeClusters } = await import('../../utils/h3Clustering');
-        clusterData = createTreeClusters(geojsonData.features as any, resolution);
-      }
-    } else {
-      // Fallback to synchronous clustering if worker not available
-      const { createTreeClusters } = await import('../../utils/h3Clustering');
-      clusterData = createTreeClusters(geojsonData.features as any, resolution);
+    // Create clusters at both resolutions
+    try {
+      // Create resolution 10 clusters
+      clusterData10 = createTreeClusters(geojsonData.features as any, 10);
+      
+      // Create resolution 8 clusters  
+      clusterData8 = createTreeClusters(geojsonData.features as any, 8);
+      
+      // Update the cluster layers with the new data
+      updateClusterLayers();
+    } catch (error) {
+      console.error('Error computing clusters:', error);
     }
-    
-
   }
   
   // Expose update function to parent
@@ -399,37 +443,6 @@
     
     // Update clusters after data changes
     await updateClusters();
-  }
-  
-  // Update layer visibility based on zoom level
-  function updateLayerVisibility() {
-    if (!map) return;
-    
-    const useClusters = shouldUseClusters(currentZoomLevel);
-    // Show clusters and hide individual trees at lower zoom levels
-    if (useClusters) {
-      if (map.getLayer(clusterLayerId)) {
-        map.setLayoutProperty(clusterLayerId, 'visibility', 'visible');
-      }
-      if (map.getLayer(`${clusterLayerId}-outline`)) {
-        map.setLayoutProperty(`${clusterLayerId}-outline`, 'visibility', 'visible');
-      }
-      if (map.getLayer(layerId)) {
-        map.setLayoutProperty(layerId, 'visibility', 'none');
-      }
-    } else {
-      // Show individual trees and hide clusters at higher zoom levels
-
-      if (map.getLayer(clusterLayerId)) {
-        map.setLayoutProperty(clusterLayerId, 'visibility', 'none');
-      }
-      if (map.getLayer(`${clusterLayerId}-outline`)) {
-        map.setLayoutProperty(`${clusterLayerId}-outline`, 'visibility', 'none');
-      }
-      if (map.getLayer(layerId)) {
-        map.setLayoutProperty(layerId, 'visibility', 'visible');
-      }
-    }
   }
   
   // Expose resize function to parent
