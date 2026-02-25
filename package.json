@@ -19,6 +19,7 @@
     "vite-plugin-copy": "^0.1.6"
   },
   "dependencies": {
+    "h3-js": "^4.4.0",
     "maplibre-gl": "^5.18.0"
   }
 }

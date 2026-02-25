@@ -2,13 +2,19 @@
   import { onMount, onDestroy } from 'svelte';
   import { Map, NavigationControl, Popup, LngLatBounds } from 'maplibre-gl';
   import 'maplibre-gl/dist/maplibre-gl.css';
+  import { createTreeClusters, getOptimalResolution, shouldUseClusters } from '../../utils/h3Clustering';
   
   export let geojsonData: GeoJSON.FeatureCollection | null = null;
+  
+  let currentZoomLevel: number = 12;
+  let clusterData: GeoJSON.FeatureCollection | null = null;
   
   let map: Map | null = null;
   let mapContainer: HTMLDivElement;
   let sourceId: string = 'tree-data-source';
   let layerId: string = 'tree-data-layer';
+  let clusterSourceId: string = 'tree-cluster-source';
+  let clusterLayerId: string = 'tree-cluster-layer';
   
   interface GeoJSONFeatureProperties {
     TreeName: string;
@@ -17,6 +23,101 @@
     prominence: string;
     months_flowering: Record<string, boolean>;
     [month: string]: boolean | string | Record<string, boolean>; // Dynamic month properties
+  }
+  
+  // Create the cluster layer
+  function createClusterLayer() {
+    if (map && map.getSource(clusterSourceId)) {
+      // Add the cluster layer
+      try {
+        // Use fill layer for H3 cell polygons
+        map.addLayer({
+          id: clusterLayerId,
+          type: 'fill',
+          source: clusterSourceId,
+          layout: {
+            visibility: 'visible'
+          },
+          paint: {
+            'fill-color': [
+              'case',
+              ['has', 'dominantColor'],
+              ['get', 'dominantColor'],
+              '#81c784'  // Default green color
+            ],
+            'fill-opacity': 0.6,
+            'fill-antialias': true
+          }
+        });
+        
+        // Add outline for better visibility
+        map.addLayer({
+          id: `${clusterLayerId}-outline`,
+          type: 'line',
+          source: clusterSourceId,
+          layout: {
+            visibility: 'visible'
+          },
+          paint: {
+            'line-color': '#ffffff',
+            'line-width': 1,
+            'line-opacity': 0.8
+          }
+        });
+        
+
+        
+        // Add event handlers for cluster popups
+        if (!map._clusterPopupHandlerAdded) {
+          map.on('click', clusterLayerId, (e) => {
+            const features = map.queryRenderedFeatures(e.point, {
+              layers: [clusterLayerId]
+            });
+            
+            if (features.length > 0) {
+              const feature = features[0];
+              const coordinates = e.lngLat;
+              
+              const count = feature.properties.count || 0;
+              const dominantType = feature.properties.dominantType || 'Unknown';
+              const treeTypes = feature.properties.treeTypes || {};
+              
+              // Create a summary of tree types
+              const typeSummary = Object.entries(treeTypes)
+                .slice(0, 5) // Show top 5 types
+                .map(([type, count]) => `${type}: ${count}`)
+                .join('<br>');
+              
+              const popupContent = `
+                <div style="color: #333; background: #fff; padding: 8px; border-radius: 4px;">
+                  <b>${count} trees in this area</b><br>
+                  <small>Dominant: ${dominantType}</small><br>
+                  ${typeSummary}
+                </div>
+              `;
+              
+              new Popup()
+                .setLngLat(coordinates)
+                .setHTML(popupContent)
+                .addTo(map);
+            }
+          });
+          
+          // Change cursor to pointer when hovering over cluster features
+          map.on('mouseenter', clusterLayerId, () => {
+            map.getCanvas().style.cursor = 'pointer';
+          });
+          
+          map.on('mouseleave', clusterLayerId, () => {
+            map.getCanvas().style.cursor = '';
+          });
+          
+          map._clusterPopupHandlerAdded = true;
+        }
+      } catch (error) {
+        console.error(`MapView: Failed to add cluster layer:`, error);
+      }
+    }
   }
   
   // Create the initial layer
@@ -149,8 +250,54 @@
           map.getSource(sourceId).setData(geojsonData);
         }
       }
+      
+      // Add cluster source if it doesn't exist
+      if (!map.getSource(clusterSourceId)) {
+        map.addSource(clusterSourceId, {
+          type: 'geojson',
+          data: clusterData || { type: 'FeatureCollection', features: [] }
+        });
+        
+        // Create the cluster layer
+        createClusterLayer();
+      }
+      
+      // Initialize clusters if we have data
+      if (geojsonData && geojsonData.features && geojsonData.features.length > 0) {
+        updateClusters();
+        updateClusterLayer();
+        updateLayerVisibility();
+      }
+    });
+    
+    // Handle zoom events to update clusters
+    map.on('zoom', () => {
+      if (map) {
+        const newZoomLevel = Math.round(map.getZoom());
+        if (newZoomLevel !== currentZoomLevel) {
+          currentZoomLevel = newZoomLevel;
+          updateClusters();
+          updateClusterLayer();
+          updateLayerVisibility();
+        }
+      }
     });
   });
+  
+  // Update the cluster layer when data changes
+  function updateClusterLayer() {
+    if (map && map.isStyleLoaded()) {
+      // Simple approach: just update the source data if it exists
+      if (map.getSource(clusterSourceId)) {
+        try {
+          const dataToSet = clusterData || { type: 'FeatureCollection', features: [] };
+          map.getSource(clusterSourceId).setData(dataToSet);
+        } catch (error) {
+          console.error(`MapView: Error updating cluster source data:`, error);
+        }
+      }
+    }
+  }
   
   // Update the layer when data changes
   function updateGeoJSONLayer() {
@@ -175,11 +322,29 @@
           console.error(`MapView: Error updating source data:`, error);
         }
       }
+      
+      // Also update cluster data
+      updateClusterLayer();
+      updateLayerVisibility();
     }
   }
   
   // Track previous data to prevent unnecessary updates
   let previousDataString: string | null = null;
+  let previousZoomLevel: number | null = null;
+  
+  function updateClusters() {
+    if (!geojsonData || !geojsonData.features || geojsonData.features.length === 0) {
+      clusterData = null;
+      return;
+    }
+    
+    // Create clusters based on current zoom level
+    const resolution = getOptimalResolution(currentZoomLevel);
+    clusterData = createTreeClusters(geojsonData.features as any, resolution);
+    
+
+  }
   
   // Expose update function to parent
   export function updateData(newData: GeoJSON.FeatureCollection | null) {
@@ -207,6 +372,40 @@
       geojsonData = newData;
       previousDataString = `length:${newLength}:${Date.now()}`; // Simple cache key with timestamp
       updateGeoJSONLayer();
+    }
+    
+    // Update clusters after data changes
+    updateClusters();
+  }
+  
+  // Update layer visibility based on zoom level
+  function updateLayerVisibility() {
+    if (!map) return;
+    
+    const useClusters = shouldUseClusters(currentZoomLevel);
+    // Show clusters and hide individual trees at lower zoom levels
+    if (useClusters) {
+      if (map.getLayer(clusterLayerId)) {
+        map.setLayoutProperty(clusterLayerId, 'visibility', 'visible');
+      }
+      if (map.getLayer(`${clusterLayerId}-outline`)) {
+        map.setLayoutProperty(`${clusterLayerId}-outline`, 'visibility', 'visible');
+      }
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, 'visibility', 'none');
+      }
+    } else {
+      // Show individual trees and hide clusters at higher zoom levels
+
+      if (map.getLayer(clusterLayerId)) {
+        map.setLayoutProperty(clusterLayerId, 'visibility', 'none');
+      }
+      if (map.getLayer(`${clusterLayerId}-outline`)) {
+        map.setLayoutProperty(`${clusterLayerId}-outline`, 'visibility', 'none');
+      }
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, 'visibility', 'visible');
+      }
     }
   }
   
