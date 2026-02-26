@@ -39,14 +39,13 @@
   function createClusterLayers() {
     if (map) {
       try {
-        // Create resolution 10 cluster layer (zoom 10-12) - less detailed clusters (larger hexagons for zoomed out view)
         if (map.getSource(clusterSourceId10) && !map.getLayer(clusterLayerId10)) {
           map.addLayer({
             id: clusterLayerId10,
             type: 'fill',
             source: clusterSourceId10,
-            minzoom: 10,
-            maxzoom: 13,
+            minzoom: 14,
+            maxzoom: 16,
             layout: {
               visibility: 'visible'
             },
@@ -68,8 +67,8 @@
             id: clusterLayerId9,
             type: 'fill',
             source: clusterSourceId9,
-            minzoom: 13,
-            maxzoom: 15,
+            minzoom: 12,
+            maxzoom: 14,
             layout: {
               visibility: 'visible'
             },
@@ -86,14 +85,13 @@
           });
         }
 
-        // Create resolution 8 cluster layer (zoom 13-15) - more detailed clusters (smaller hexagons for zoomed in view)
         if (map.getSource(clusterSourceId8) && !map.getLayer(clusterLayerId8)) {
           map.addLayer({
             id: clusterLayerId8,
             type: 'fill',
             source: clusterSourceId8,
-            minzoom: 15,
-            maxzoom: 16,
+            minzoom: 10,
+            maxzoom: 12,
             layout: {
               visibility: 'visible'
             },
@@ -453,13 +451,14 @@
       
       // Always use worker if available for better performance
       if (clusteringWorker) {
-        clusterData10 = await computeClustersInWorker(clusteringWorker, features, 10);
-        clusterData9 = await computeClustersInWorker(clusteringWorker, features, 9);
-        clusterData8 = await computeClustersInWorker(clusteringWorker, features, 8);
+        const clusterResults = await computeClustersInWorker(clusteringWorker, features, [10, 9, 8]);
+        clusterData10 = clusterResults[10];
+        clusterData9 = clusterResults[9];
+        clusterData8 = clusterResults[8];
       } else {
         // Fallback to main thread if worker not available
         clusterData10 = createTreeClusters(features, 10);
-        clusterData9 = computeClusters(features, 9);
+        clusterData9 = createTreeClusters(features, 9);
         clusterData8 = createTreeClusters(features, 8);
       }
       

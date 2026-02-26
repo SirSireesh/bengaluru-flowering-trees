@@ -22,20 +22,26 @@ interface ClusterFeatureProperties {
 interface ClusterWorkerMessage {
   type: 'cluster';
   features: GeoJSON.Feature<GeoJSON.Point, TreeFeatureProperties>[];
-  resolution: number;
+  resolutions: number[];
 }
 
 interface ClusterWorkerResponse {
   type: 'cluster_result';
-  data: GeoJSON.FeatureCollection<GeoJSON.Polygon, ClusterFeatureProperties>;
+  data: Record<number, GeoJSON.FeatureCollection<GeoJSON.Polygon, ClusterFeatureProperties>>;
 }
 
 self.onmessage = function(e: MessageEvent<ClusterWorkerMessage>) {
   if (e.data.type === 'cluster') {
-    const result = createTreeClusters(e.data.features, e.data.resolution);
+    const results: Record<number, GeoJSON.FeatureCollection<GeoJSON.Polygon, ClusterFeatureProperties>> = {};
+    
+    // Process each resolution
+    e.data.resolutions.forEach(resolution => {
+      results[resolution] = createTreeClusters(e.data.features, resolution);
+    });
+    
     const response: ClusterWorkerResponse = {
       type: 'cluster_result',
-      data: result
+      data: results
     };
     self.postMessage(response);
   }

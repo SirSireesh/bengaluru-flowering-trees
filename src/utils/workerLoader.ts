@@ -29,12 +29,12 @@ export function createDataLoaderWorker(): Worker {
 interface ClusterWorkerMessage {
   type: 'cluster';
   features: any[];
-  resolution: number;
+  resolutions: number[];
 }
 
 interface ClusterWorkerResponse {
   type: 'cluster_result';
-  data: GeoJSON.FeatureCollection<GeoJSON.Polygon, any>;
+  data: Record<number, GeoJSON.FeatureCollection<GeoJSON.Polygon, any>>;
 }
 
 interface DataLoaderMessage {
@@ -51,8 +51,8 @@ interface DataLoaderResponse {
 export function computeClustersInWorker(
   worker: Worker,
   features: any[],
-  resolution: number
-): Promise<GeoJSON.FeatureCollection<GeoJSON.Polygon, any>> {
+  resolutions: number[]
+): Promise<Record<number, GeoJSON.FeatureCollection<GeoJSON.Polygon, any>>> {
   return new Promise((resolve, reject) => {
     // Set up message handler
     const messageHandler = (e: MessageEvent<ClusterWorkerResponse>) => {
@@ -76,10 +76,20 @@ export function computeClustersInWorker(
     const message: ClusterWorkerMessage = {
       type: 'cluster',
       features,
-      resolution
+      resolutions
     };
     worker.postMessage(message);
   });
+}
+
+// Backward compatibility function for single resolution
+export function computeClustersInWorkerSingle(
+  worker: Worker,
+  features: any[],
+  resolution: number
+): Promise<GeoJSON.FeatureCollection<GeoJSON.Polygon, any>> {
+  return computeClustersInWorker(worker, features, [resolution])
+    .then(results => results[resolution]);
 }
 
 export function loadGeoJSONInWorker(
