@@ -108,49 +108,73 @@
           });
         }
 
-        // Add event handlers for cluster popups (shared between both cluster layers)
-        if (!map._clusterPopupHandlerAdded && map.getLayer(clusterLayerId10) && map.getLayer(clusterLayerId8)) {
-          const handleClusterClick = (e, layerId) => {
-            const features = map.queryRenderedFeatures(e.point, {
-              layers: [layerId]
-            });
+      } catch (error) {
+        console.error(`MapView: Failed to add cluster layers:`, error);
+        console.error('This might be due to invalid style properties or other map errors');
+      }
+    }
+  }
 
-            if (features.length > 0) {
-              const feature = features[0];
-              const coordinates = e.lngLat;
+  // Set up event handlers for cluster layers
+  function setupClusterEventHandlers() {
+    if (!map || map._clusterPopupHandlerAdded) {
+      return;
+    }
+    
+    try {
+      // Check if at least one cluster layer exists
+      const hasClusterLayers = map.getLayer(clusterLayerId10) || map.getLayer(clusterLayerId9) || map.getLayer(clusterLayerId8);
+      
+      if (hasClusterLayers) {
+        const handleClusterClick = (e, layerId) => {
+          const features = map.queryRenderedFeatures(e.point, {
+            layers: [layerId]
+          });
 
-              const count = feature.properties.count || 0;
-              const dominantType = feature.properties.dominantType || 'Unknown';
-              const treeTypes = feature.properties.treeTypes || {};
+          if (features.length > 0) {
+            const feature = features[0];
+            const coordinates = e.lngLat;
 
-              // Create a summary of tree types
-              const typeSummary = Object.entries(treeTypes)
-                .slice(0, 5) // Show top 5 types
-                .map(([type, count]) => `${type}: ${count}`)
-                .join('<br>');
-              
-              const popupContent = `
-                <div style="color: #333; background: #fff; padding: 8px; border-radius: 4px;">
-                  <b>${count} trees in this area</b><br>
-                  <small>Dominant: ${dominantType}</small><br>
-                  ${typeSummary}
-                </div>
-              `;
-              
-              new Popup()
-                .setLngLat(coordinates)
-                .setHTML(popupContent)
-                .addTo(map);
-            }
-          };
-          
+            const count = feature.properties.count || 0;
+            const dominantType = feature.properties.dominantType || 'Unknown';
+            const treeTypes = feature.properties.treeTypes || {};
+
+            // Create a summary of tree types
+            const typeSummary = Object.entries(treeTypes)
+              .slice(0, 5) // Show top 5 types
+              .map(([type, count]) => `${type}: ${count}`)
+              .join('<br>');
+            
+            const popupContent = `
+              <div style="color: #333; background: #fff; padding: 8px; border-radius: 4px;">
+                <b>${count} trees in this area</b><br>
+                <small>Dominant: ${dominantType}</small><br>
+                ${typeSummary}
+              </div>
+            `;
+            
+            new Popup()
+              .setLngLat(coordinates)
+              .setHTML(popupContent)
+              .addTo(map);
+          }
+        };
+        
+        // Add click handlers for all cluster layers that exist
+        if (map.getLayer(clusterLayerId10)) {
           map.on('click', clusterLayerId10, (e) => handleClusterClick(e, clusterLayerId10));
+        }
+        if (map.getLayer(clusterLayerId9)) {
           map.on('click', clusterLayerId9, (e) => handleClusterClick(e, clusterLayerId9));
+        }
+        if (map.getLayer(clusterLayerId8)) {
           map.on('click', clusterLayerId8, (e) => handleClusterClick(e, clusterLayerId8));
-          
-          // Change cursor to pointer when hovering over cluster features
-          const clusterLayers = [clusterLayerId10, clusterLayerId8];
-          clusterLayers.forEach(layerId => {
+        }
+        
+        // Change cursor to pointer when hovering over cluster features (mouse devices)
+        const clusterLayers = [clusterLayerId10, clusterLayerId9, clusterLayerId8];
+        clusterLayers.forEach(layerId => {
+          if (map.getLayer(layerId)) {
             map.on('mouseenter', layerId, () => {
               map.getCanvas().style.cursor = 'pointer';
             });
@@ -158,13 +182,14 @@
             map.on('mouseleave', layerId, () => {
               map.getCanvas().style.cursor = '';
             });
-          });
-          
-          map._clusterPopupHandlerAdded = true;
-        }
-      } catch (error) {
-        console.error(`MapView: Failed to add cluster layers:`, error);
+          }
+        });
+        
+        map._clusterPopupHandlerAdded = true;
+        console.log('Cluster event handlers set up successfully');
       }
+    } catch (error) {
+      console.error('Error setting up cluster event handlers:', error);
     }
   }
   
@@ -328,6 +353,13 @@
       // Create the cluster layers
       createClusterLayers();
       
+      // Ensure event handlers are set up for all cluster layers
+      setupClusterEventHandlers();
+      
+
+      
+
+      
       // Initialize clusters if we have data
       if (geojsonData && geojsonData.features && geojsonData.features.length > 0) {
         // Wrap in async function to avoid Svelte compiler issues
@@ -341,7 +373,15 @@
   
   // Update the cluster layers when data changes
   function updateClusterLayers() {
-    if (!map || !map.isStyleLoaded()) {
+    if (!map) {
+      return;
+    }
+    
+    if (!map.isStyleLoaded()) {
+      // Try again after a short delay if style isn't loaded
+      setTimeout(() => {
+        updateClusterLayers();
+      }, 500);
       return;
     }
     
@@ -354,15 +394,11 @@
       return;
     }
   
-    // Update resolution 10 cluster source only if data changed
+    // Update resolution 10 cluster source
     if (source10) {
       try {
         const dataToSet = clusterData10 || { type: 'FeatureCollection', features: [] };
-        // Only update if the data reference has changed (indicating new cluster computation)
-        const currentSourceData = (source10 as any)._data;
-        if (currentSourceData !== dataToSet) {
-          source10.setData(dataToSet);
-        }
+        source10.setData(dataToSet);
       } catch (error) {
         console.error(`MapView: Error updating cluster source 10 data:`, error);
       }
@@ -371,25 +407,17 @@
     if (source9) {
       try {
         const dataToSet = clusterData9 || { type: 'FeatureCollection', features: [] };
-        // Only update if the data reference has changed (indicating new cluster computation)
-        const currentSourceData = (source9 as any)._data;
-        if (currentSourceData !== dataToSet) {
-          source9.setData(dataToSet);
-        }
+        source9.setData(dataToSet);
       } catch (error) {
-        console.error(`MapView: Error updating cluster source 10 data:`, error);
+        console.error(`MapView: Error updating cluster source 9 data:`, error);
       }
     }
 
-    // Update resolution 8 cluster source only if data changed
+    // Update resolution 8 cluster source
     if (source8) {
       try {
         const dataToSet = clusterData8 || { type: 'FeatureCollection', features: [] };
-        // Only update if the data reference has changed (indicating new cluster computation)
-        const currentSourceData = (source8 as any)._data;
-        if (currentSourceData !== dataToSet) {
-          source8.setData(dataToSet);
-        }
+        source8.setData(dataToSet);
       } catch (error) {
         console.error(`MapView: Error updating cluster source 8 data:`, error);
       }
@@ -451,12 +479,35 @@
       
       // Always use worker if available for better performance
       if (clusteringWorker) {
-        const clusterResults = await computeClustersInWorker(clusteringWorker, features, [10, 9, 8]);
-        clusterData10 = clusterResults[10];
-        clusterData9 = clusterResults[9];
-        clusterData8 = clusterResults[8];
+        try {
+          const clusterResults = await computeClustersInWorker(clusteringWorker, features, [10, 9, 8]);
+          
+          clusterData10 = clusterResults[10];
+          clusterData9 = clusterResults[9];
+          clusterData8 = clusterResults[8];
+          
+          // Check if worker produced valid results
+          const hasValidResults = (clusterResults[10]?.features?.length || 0) > 0 ||
+                                 (clusterResults[9]?.features?.length || 0) > 0 ||
+                                 (clusterResults[8]?.features?.length || 0) > 0;
+          
+          if (!hasValidResults) {
+            console.warn('Worker clustering produced empty results, falling back to main thread');
+            // Fallback to main thread if worker produced empty results
+            clusterData10 = createTreeClusters(features, 10);
+            clusterData9 = createTreeClusters(features, 9);
+            clusterData8 = createTreeClusters(features, 8);
+          }
+        } catch (workerError) {
+          console.error('Worker clustering failed, falling back to main thread:', workerError);
+          // Fallback to main thread if worker fails
+          clusterData10 = createTreeClusters(features, 10);
+          clusterData9 = createTreeClusters(features, 9);
+          clusterData8 = createTreeClusters(features, 8);
+        }
       } else {
         // Fallback to main thread if worker not available
+        console.log('Using main thread for clustering');
         clusterData10 = createTreeClusters(features, 10);
         clusterData9 = createTreeClusters(features, 9);
         clusterData8 = createTreeClusters(features, 8);
@@ -467,6 +518,11 @@
       
       // Update the cluster layers with the new data
       updateClusterLayers();
+      
+      // Ensure event handlers are set up after cluster data is updated
+      setupClusterEventHandlers();
+      
+
     } catch (error) {
       console.error('Error computing clusters:', error);
     }
