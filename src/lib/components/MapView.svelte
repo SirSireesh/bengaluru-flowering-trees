@@ -12,6 +12,7 @@
   
   let currentZoomLevel: number = 12;
   let clusterData10: GeoJSON.FeatureCollection | null = null;
+  let clusterData9: GeoJSON.FeatureCollection | null = null;
   let clusterData8: GeoJSON.FeatureCollection | null = null;
   
   let map: Map | null = null;
@@ -20,6 +21,8 @@
   let layerId: string = 'tree-data-layer';
   let clusterSourceId10: string = 'tree-cluster-source-10';
   let clusterLayerId10: string = 'tree-cluster-layer-10';
+  let clusterSourceId9: string = 'tree-cluster-source-9';
+  let clusterLayerId9: string = 'tree-cluster-layer-9';
   let clusterSourceId8: string = 'tree-cluster-source-8';
   let clusterLayerId8: string = 'tree-cluster-layer-8';
   
@@ -42,8 +45,31 @@
             id: clusterLayerId10,
             type: 'fill',
             source: clusterSourceId10,
-            minzoom: 12,
-            maxzoom: 16,
+            minzoom: 10,
+            maxzoom: 13,
+            layout: {
+              visibility: 'visible'
+            },
+            paint: {
+              'fill-color': [
+                'case',
+                ['has', 'dominantColor'],
+                ['get', 'dominantColor'],
+                '#81c784'  // Default green color
+              ],
+              'fill-opacity': 0.6,
+              'fill-antialias': true
+            }
+          });
+        }
+
+        if (map.getSource(clusterSourceId9) && !map.getLayer(clusterLayerId9)) {
+          map.addLayer({
+            id: clusterLayerId9,
+            type: 'fill',
+            source: clusterSourceId9,
+            minzoom: 13,
+            maxzoom: 15,
             layout: {
               visibility: 'visible'
             },
@@ -66,8 +92,8 @@
             id: clusterLayerId8,
             type: 'fill',
             source: clusterSourceId8,
-            minzoom: 10,
-            maxzoom: 12,
+            minzoom: 15,
+            maxzoom: 16,
             layout: {
               visibility: 'visible'
             },
@@ -82,7 +108,6 @@
               'fill-antialias': true
             }
           });
-
         }
 
         // Add event handlers for cluster popups (shared between both cluster layers)
@@ -122,6 +147,7 @@
           };
           
           map.on('click', clusterLayerId10, (e) => handleClusterClick(e, clusterLayerId10));
+          map.on('click', clusterLayerId9, (e) => handleClusterClick(e, clusterLayerId9));
           map.on('click', clusterLayerId8, (e) => handleClusterClick(e, clusterLayerId8));
           
           // Change cursor to pointer when hovering over cluster features
@@ -254,9 +280,9 @@
         map.resize();
       }
     };
-    
+
     window.addEventListener('resize', handleResize);
-    
+
     onDestroy(() => {
       window.removeEventListener('resize', handleResize);
     });
@@ -286,7 +312,14 @@
           data: clusterData10 || { type: 'FeatureCollection', features: [] }
         });
       }
-      
+
+      if (!map.getSource(clusterSourceId9)) {
+        map.addSource(clusterSourceId9, {
+          type: 'geojson',
+          data: clusterData9 || { type: 'FeatureCollection', features: [] }
+        });
+      }
+
       if (!map.getSource(clusterSourceId8)) {
         map.addSource(clusterSourceId8, {
           type: 'geojson',
@@ -316,12 +349,13 @@
     
     // Performance optimization: Only update sources if they exist and data has changed
     const source10 = map.getSource(clusterSourceId10);
+    const source9 = map.getSource(clusterSourceId9);
     const source8 = map.getSource(clusterSourceId8);
     
-    if (!source10 && !source8) {
+    if (!source10 && !source9 && !source8) {
       return;
     }
-    
+  
     // Update resolution 10 cluster source only if data changed
     if (source10) {
       try {
@@ -335,7 +369,20 @@
         console.error(`MapView: Error updating cluster source 10 data:`, error);
       }
     }
-    
+
+    if (source9) {
+      try {
+        const dataToSet = clusterData9 || { type: 'FeatureCollection', features: [] };
+        // Only update if the data reference has changed (indicating new cluster computation)
+        const currentSourceData = (source9 as any)._data;
+        if (currentSourceData !== dataToSet) {
+          source9.setData(dataToSet);
+        }
+      } catch (error) {
+        console.error(`MapView: Error updating cluster source 10 data:`, error);
+      }
+    }
+
     // Update resolution 8 cluster source only if data changed
     if (source8) {
       try {
@@ -371,19 +418,6 @@
         source.setData(dataToSet);
       }
       
-      // Fit map to the bounds of the GeoJSON data if features exist
-      // Only do this if we have new data (not on every update)
-      if (geojsonData && geojsonData.features && geojsonData.features.length > 0 && 
-          (!currentSourceData || currentSourceData.features?.length === 0)) {
-        const bounds = new LngLatBounds();
-        geojsonData.features.forEach(feature => {
-          if (feature.geometry.type === 'Point') {
-            const coordinates = feature.geometry.coordinates;
-            bounds.extend([coordinates[0], coordinates[1]]);
-          }
-        });
-        map.fitBounds(bounds, { padding: 50 });
-      }
     } catch (error) {
       console.error(`MapView: Error updating source data:`, error);
     }
@@ -393,13 +427,12 @@
   }
   
   // Track previous data to prevent unnecessary updates
-  let previousDataString: string | null = null;
-  let previousZoomLevel: number | null = null;
   let clustersComputedForData: string | null = null;
   
   async function updateClusters() {
     if (!geojsonData || !geojsonData.features || geojsonData.features.length === 0) {
       clusterData10 = null;
+      clusterData9 = null;
       clusterData8 = null;
       clustersComputedForData = null;
       return;
@@ -421,10 +454,12 @@
       // Always use worker if available for better performance
       if (clusteringWorker) {
         clusterData10 = await computeClustersInWorker(clusteringWorker, features, 10);
+        clusterData9 = await computeClustersInWorker(clusteringWorker, features, 9);
         clusterData8 = await computeClustersInWorker(clusteringWorker, features, 8);
       } else {
         // Fallback to main thread if worker not available
         clusterData10 = createTreeClusters(features, 10);
+        clusterData9 = computeClusters(features, 9);
         clusterData8 = createTreeClusters(features, 8);
       }
       
@@ -455,36 +490,23 @@
       // Same data object reference, no need to update
       return;
     }
-    
-    // Performance optimization: Quick length check
-    const newLength = newData.features?.length || 0;
-    const currentLength = geojsonData?.features?.length || 0;
-    
-    if (newLength === 0) {
-      // No features in new data
-      geojsonData = newData;
-      clustersComputedForData = null;
-      updateGeoJSONLayer();
-      await updateClusters();
-      return;
-    }
-    
+
     // For data changes, update immediately and recompute clusters
     geojsonData = newData;
     clustersComputedForData = null; // Reset cluster cache since data changed
     updateGeoJSONLayer();
-    
+
     // Update clusters after data changes
     await updateClusters();
   }
-  
+
   // Expose resize function to parent
   export function resizeMap() {
     if (map) {
       map.resize();
     }
   }
-  
+
   onDestroy(() => {
     if (map) {
       map.remove();
