@@ -1,29 +1,13 @@
 export function createClusteringWorker(): Worker {
-  // Check if we're in development or production
-  const isProduction = import.meta.env.PROD;
-  
-  if (isProduction) {
-    // In production, the worker is copied to the assets folder
-    return new Worker('/assets/h3ClusteringWorker.ts', { type: 'module' });
-  } else {
-    // In development, we need to use the source file directly
-    // Note: This might need adjustment based on your dev server setup
-    return new Worker(new URL('../utils/h3ClusteringWorker.ts', import.meta.url), { type: 'module' });
-  }
+  // Use Vite's worker import syntax - this will be handled correctly in both dev and prod
+  const worker = new Worker(new URL('../utils/h3ClusteringWorker.ts?worker', import.meta.url), { type: 'module' });
+  return worker;
 }
 
 export function createDataLoaderWorker(): Worker {
-  // Check if we're in development or production
-  const isProduction = import.meta.env.PROD;
-  
-  if (isProduction) {
-    // In production, the worker is copied to the assets folder
-    return new Worker('/assets/dataLoaderWorker.ts', { type: 'module' });
-  } else {
-    // In development, we need to use the source file directly
-    // Note: This might need adjustment based on your dev server setup
-    return new Worker(new URL('../utils/dataLoaderWorker.ts', import.meta.url), { type: 'module' });
-  }
+  // Use Vite's worker import syntax - this will be handled correctly in both dev and prod
+  const worker = new Worker(new URL('../utils/dataLoaderWorker.ts?worker', import.meta.url), { type: 'module' });
+  return worker;
 }
 
 interface ClusterWorkerMessage {
