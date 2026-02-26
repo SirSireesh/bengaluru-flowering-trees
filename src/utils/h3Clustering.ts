@@ -120,3 +120,6 @@ export function shouldUseClusters(zoomLevel: number): boolean {
   // Show clusters at lower zoom levels, switch to individual trees at higher zoom levels
   return zoomLevel <= 15;
 }
+
+
+
