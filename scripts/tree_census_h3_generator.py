@@ -6,8 +6,6 @@ import geopandas as gpd
 import pandas as pd
 import h3pandas
 import h3
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 from shapely.geometry import Polygon
 
 
@@ -134,14 +132,16 @@ flowering_tree_df = gdf.merge(tree_data, on=["TreeName"])
 flowering_tree_df = flowering_tree_df.to_crs(epsg=4326)
 flowering_tree_df["colour_hex"] = flowering_tree_df["colour"]
 
+# Sort resolutions from lowest to highest for optimization
+resolutions_sorted = sorted(resolutions)
+
+# Dictionary to store H3 indexes at different resolutions
+# Key: resolution, Value: dataframe with index
+resolution_h3_indexes = {}
+
 # Loop through each resolution
-for resolution in resolutions:
+for resolution in resolutions_sorted:
     print(f"\nProcessing resolution: {resolution}")
-    
-    # Create H3 indexes from the tree coordinates for this resolution
-    flowering_tree_df["h3_index"] = flowering_tree_df.geometry.apply(
-        lambda point: h3.latlng_to_cell(point.y, point.x, res=resolution)
-    )
 
     # Loop through each month and create separate visualizations
     for month in MONTHS:
@@ -153,38 +153,30 @@ for resolution in resolutions:
             flowering_tree_df[month_column]
         ].copy()
 
-        if len(flowering_in_month) == 0:
-            print(f"No trees flowering in {month}, skipping...")
-            continue
+        # Add the count of each species within the cell
+        # Group by H3 index and count species
+        flowering_in_month = flowering_in_month.h3.geo_to_h3(resolution)
 
-        # Group by H3 index and blend colors weighted by prominence
-        # First, group by H3 index to get all trees in each cell
-        h3_groups = flowering_in_month.groupby("h3_index")
+        # Group by H3 index (which is now in the DataFrame index) and get counts for each tree name
+        h3_groups = flowering_in_month.groupby(level=0)
 
-        if len(h3_groups) == 0:
-            print(f"No H3 cells with flowering trees in {month}, skipping...")
-            continue
-
-        # Apply prominence-weighted color blending to each H3 cell
-        blended_colors = []
+        # Count species within each H3 cell
+        h3_species_counts = []
         for h3_index, group in h3_groups:
-            blended_color = blend_colors_with_prominence(group)
-            if blended_color:
-                # Get unique tree species names for this H3 cell
-                tree_species = group["TreeName"].unique().tolist()
-                blended_colors.append(
-                    {
-                        "h3_index": h3_index,
-                        "colour_hex": blended_color,
-                        "tree_species": tree_species,
-                    }
-                )
+            # Count each species in this H3 cell
+            species_counts = group["TreeName"].value_counts().to_dict()
+            h3_species_counts.append({
+                "h3_index": h3_index,
+                "species_counts": species_counts,
+                "total_trees": len(group),
+            })
 
-        if not blended_colors:
-            print(f"No valid blended colors for {month}, skipping...")
+        if not h3_species_counts:
+            print(f"No trees in H3 cells for {month}, skipping...")
             continue
 
-        most_frequent_colors = pd.DataFrame(blended_colors)
+        # Create DataFrame with species counts
+        h3_counts_df = pd.DataFrame(h3_species_counts)
 
         # Create a GeoDataFrame for the H3 cells
         def h3_cell_to_polygon(h3_index):
@@ -196,47 +188,11 @@ for resolution in resolutions:
             return Polygon(polygon_coords)
 
         h3_cells = gpd.GeoDataFrame(
-            most_frequent_colors,
-            geometry=most_frequent_colors["h3_index"].apply(
+            h3_counts_df,
+            geometry=h3_counts_df["h3_index"].apply(
                 lambda h3_index: h3_cell_to_polygon(h3_index)
             ),
         )
-
-        # Plot the H3 grid with cells colored by the most frequent color
-        fig, ax = plt.subplots(figsize=(12, 12))
-
-        # Create a color map from hex values
-        color_list = list(colour_hexes)
-        cmap = mcolors.ListedColormap(color_list)
-
-        # Plot with proper color handling
-        h3_cells.plot(
-            ax=ax,
-            column="colour_hex",
-            cmap=cmap,
-            legend=True,
-            edgecolor="black",
-            linewidth=0.5,
-            legend_kwds={"title": "Flower Color"},
-        )
-
-        # Add title and labels
-        plt.title(
-            f"Bangalore Tree Distribution - {month} - H3 Resolution {resolution}",
-            fontsize=16,
-        )
-        plt.xlabel("Longitude", fontsize=12)
-        plt.ylabel("Latitude", fontsize=12)
-
-        # Show the plot and save PNG if requested
-        if args.output_format in ["png", "both"]:
-            plt.tight_layout()
-            png_filename = f"h3_tree_distribution_{month}_resolution_{resolution}.png"
-            plt.savefig(Path(args.output_dir) / png_filename, dpi=300, bbox_inches="tight")
-            plt.close()
-            print(f"Saved PNG to '{png_filename}'")
-        else:
-            plt.close()
 
         # Save GeoJSON if requested
         if args.output_format in ["geojson", "both"]:
@@ -249,19 +205,14 @@ for resolution in resolutions:
             geojson_gdf["month"] = month
             geojson_gdf["resolution"] = resolution
 
-            # Add properties for web mapping
-            geojson_gdf["prominence"] = "blended"  # Indicates this is a blended color
-
             # Select relevant columns for GeoJSON
             geojson_gdf = geojson_gdf[
                 [
                     "h3_index",
-                    "colour_hex",
-                    "tree_species",
-                    "prominence",
                     "month",
                     "resolution",
                     "geometry",
+                    "species_counts",
                 ]
             ]
 
