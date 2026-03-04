@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { Map, NavigationControl, Popup, LngLatBounds } from 'maplibre-gl';
+  import { Map, NavigationControl, Popup, LngLatBounds, GeolocateControl } from 'maplibre-gl';
   import 'maplibre-gl/dist/maplibre-gl.css';
   import { shouldUseClusters } from '../../utils/h3Clustering';
   import { loadPrecomputedClusters, getClusterStyleFunction, loadTreeSpeciesColors } from '../../utils/precomputedClusters';
@@ -297,6 +297,17 @@
     
     // Add navigation controls
     map.addControl(new NavigationControl(), 'top-right');
+
+    // Add geolocate control to the map
+    map.addControl(
+      new GeolocateControl({
+        positionOptions: {
+          enableHighAccuracy: true
+        },
+        trackUserLocation: true
+      }),
+      'top-right'
+    );
     
     // Handle window resize events to ensure map resizes properly
     const handleResize = () => {
