@@ -76,6 +76,12 @@ jobs:
           echo "=== Files in public/geojson after Python step ==="
           ls -la public/geojson/ | head -20
 
+      - name: Generate H3 cell data
+        run: |
+          python scripts/tree_census_h3_generator.py --tree-census-path scripts/datasets/blr-tree-census/bbmp_tree_census_july2025.kml --tree-species-data=public/tree_species.parquet --resolutions 8,9,10 --output-format geojson --output-dir public/geojson/
+          echo "=== Files in public/geojson after H3 generation ==="
+          ls -la public/geojson/ | head -20
+
       - name: Install Node dependencies
         run: npm install
 
