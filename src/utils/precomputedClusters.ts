@@ -19,40 +19,26 @@ export async function loadTreeSpeciesColors(): Promise<void> {
   if (colorsLoaded) return;
   
   try {
-    // Load parquet file directly using hyparquet
-    const { asyncBufferFromUrl, parquetReadObjects } = await import('hyparquet');
+    // Load pre-generated JSON file (created during build process)
+    const response = await fetch('/tree_species_colors.min.json');
     
-    // Create file object from the parquet file
-    const file = await asyncBufferFromUrl({ 
-      url: '/tree_species.parquet',
-      fetchOptions: {
-        method: 'GET'
-      }
-    });
+    if (!response.ok) {
+      throw new Error(`Failed to load tree species colors: ${response.status} ${response.statusText}`);
+    }
     
-    // Read all objects from the parquet file
-    const data = await parquetReadObjects({
-      file,
-      columns: ['TreeName', 'colour'] // Only read the columns we need
-    });
+    const colorData = await response.json();
     
-    // Create color mapping from the data
-    for (const row of data) {
-      const treeName = row.TreeName;
-      const colour = row.colour;
-      
-      // Skip if colour is null/undefined or tree is 'Others'
-      if (colour && treeName !== 'Others') {
-        treeSpeciesColors[treeName] = colour;
-      }
+    // Copy the data to our internal mapping
+    for (const [treeName, colour] of Object.entries(colorData)) {
+      treeSpeciesColors[treeName] = colour;
     }
     
     colorsLoaded = true;
-    console.log(`Loaded ${Object.keys(treeSpeciesColors).length} tree species colors from parquet`);
+    console.log(`Loaded ${Object.keys(treeSpeciesColors).length} tree species colors from JSON`);
     
   } catch (error) {
-    console.error('Error loading tree species colors from parquet:', error);
-    throw error; // Re-throw to make it clear this is required
+    console.error('Error loading tree species colors:', error);
+    throw error;
   }
 }
 

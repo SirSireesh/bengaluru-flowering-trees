@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run compress-geojson && vite build",
+    "build": "npm run generate-tree-data && npm run compress-geojson && vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
-    "compress-geojson": "find public/geojson -name '*.geojson' -exec gzip -k -9 {} \\;"
+    "compress-geojson": "find public/geojson -name '*.geojson' -exec gzip -k -9 {} \\;",
+    "generate-tree-data": "python scripts/generate_tree_data.py"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
@@ -20,7 +21,6 @@
   },
   "dependencies": {
     "h3-js": "^4.4.0",
-    "hyparquet": "^1.25.1",
     "maplibre-gl": "^5.18.0"
   }
 }
