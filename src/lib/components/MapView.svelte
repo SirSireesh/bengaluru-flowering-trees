@@ -3,17 +3,16 @@
   import { Map, NavigationControl, Popup, LngLatBounds } from 'maplibre-gl';
   import 'maplibre-gl/dist/maplibre-gl.css';
   import { shouldUseClusters } from '../../utils/h3Clustering';
-  import { createClusteringWorker, computeClustersInWorker } from '../../utils/workerLoader';
-  import { createTreeClusters } from '../../utils/h3Clustering';
+  import { loadPrecomputedClusters, getClusterStyleFunction, loadTreeSpeciesColors } from '../../utils/precomputedClusters';
 
-  let clusteringWorker: Worker | null = null;
-  
   export let geojsonData: GeoJSON.FeatureCollection | null = null;
+  export let selectedMonth: string = 'January';
   
   let currentZoomLevel: number = 12;
   let clusterData10: GeoJSON.FeatureCollection | null = null;
   let clusterData9: GeoJSON.FeatureCollection | null = null;
   let clusterData8: GeoJSON.FeatureCollection | null = null;
+  let isLoadingClusters = false;
   
   let map: Map | null = null;
   let mapContainer: HTMLDivElement;
@@ -275,8 +274,10 @@
   }
   
   onMount(() => {
-    // Initialize clustering worker
-    clusteringWorker = createClusteringWorker();
+    // Load tree species colors first
+    loadTreeSpeciesColors().catch(error => {
+      console.error('Failed to load tree species colors:', error);
+    });
     
     const bengaluruBounds = new LngLatBounds(
       [77.45, 12.80], // Southwest corner
@@ -360,12 +361,9 @@
       
 
       
-      // Initialize clusters if we have data
-      if (geojsonData && geojsonData.features && geojsonData.features.length > 0) {
-        // Wrap in async function to avoid Svelte compiler issues
-        (async () => {
-          await updateClusters();
-        })();
+      // Load precomputed clusters for the initial month
+      if (selectedMonth) {
+        await loadPrecomputedClustersForMonth();
       }
     });
     
@@ -452,69 +450,36 @@
     updateClusterLayers();
   }
   
-  // Track previous data to prevent unnecessary updates
-  let clustersComputedForData: string | null = null;
+  // Track previous month to prevent unnecessary updates
+  let clustersLoadedForMonth: string | null = null;
   
-  async function updateClusters() {
-    if (!geojsonData || !geojsonData.features || geojsonData.features.length === 0) {
-      clusterData10 = null;
-      clusterData9 = null;
-      clusterData8 = null;
-      clustersComputedForData = null;
+  async function loadPrecomputedClustersForMonth() {
+    if (!selectedMonth || isLoadingClusters) {
       return;
     }
     
-    // Performance optimization: Only recompute clusters if data has actually changed
-    // Since clusters only change when month selection changes, we can use a simple cache key
-    const currentDataKey = `${geojsonData.features.length}-${geojsonData.features[0]?.properties?.TreeName || 'unknown'}`;
-    
-    if (currentDataKey === clustersComputedForData) {
-      // Clusters already computed for this data, no need to recompute
+    // Only load clusters if month has changed
+    if (selectedMonth === clustersLoadedForMonth) {
       return;
     }
     
-    // Create clusters at both resolutions
+    isLoadingClusters = true;
+    
     try {
-      const features = geojsonData.features as any;
+      console.log(`Loading precomputed clusters for month: ${selectedMonth}`);
       
-      // Always use worker if available for better performance
-      if (clusteringWorker) {
-        try {
-          const clusterResults = await computeClustersInWorker(clusteringWorker, features, [10, 9, 8]);
-          
-          clusterData10 = clusterResults[10];
-          clusterData9 = clusterResults[9];
-          clusterData8 = clusterResults[8];
-          
-          // Check if worker produced valid results
-          const hasValidResults = (clusterResults[10]?.features?.length || 0) > 0 ||
-                                 (clusterResults[9]?.features?.length || 0) > 0 ||
-                                 (clusterResults[8]?.features?.length || 0) > 0;
-          
-          if (!hasValidResults) {
-            console.warn('Worker clustering produced empty results, falling back to main thread');
-            // Fallback to main thread if worker produced empty results
-            clusterData10 = createTreeClusters(features, 10);
-            clusterData9 = createTreeClusters(features, 9);
-            clusterData8 = createTreeClusters(features, 8);
-          }
-        } catch (workerError) {
-          console.error('Worker clustering failed, falling back to main thread:', workerError);
-          // Fallback to main thread if worker fails
-          clusterData10 = createTreeClusters(features, 10);
-          clusterData9 = createTreeClusters(features, 9);
-          clusterData8 = createTreeClusters(features, 8);
-        }
-      } else {
-        // Fallback to main thread if worker not available
-        console.log('Using main thread for clustering');
-        clusterData10 = createTreeClusters(features, 10);
-        clusterData9 = createTreeClusters(features, 9);
-        clusterData8 = createTreeClusters(features, 8);
-      }
+      // Load clusters for all three resolutions in parallel
+      const [clusters10, clusters9, clusters8] = await Promise.all([
+        loadPrecomputedClusters(selectedMonth, 10),
+        loadPrecomputedClusters(selectedMonth, 9),
+        loadPrecomputedClusters(selectedMonth, 8)
+      ]);
       
-      // Mark that we've computed clusters for this data
-      clustersComputedForData = currentDataKey;
+      clusterData10 = clusters10;
+      clusterData9 = clusters9;
+      clusterData8 = clusters8;
+      
+      clustersLoadedForMonth = selectedMonth;
       
       // Update the cluster layers with the new data
       updateClusterLayers();
@@ -522,37 +487,40 @@
       // Ensure event handlers are set up after cluster data is updated
       setupClusterEventHandlers();
       
-
     } catch (error) {
-      console.error('Error computing clusters:', error);
+      console.error('Error loading precomputed clusters:', error);
+      // Fallback: keep existing cluster data if available
+    } finally {
+      isLoadingClusters = false;
     }
   }
   
   // Expose update function to parent
-  export async function updateData(newData: GeoJSON.FeatureCollection | null) {
+  export async function updateData(newData: GeoJSON.FeatureCollection | null, newMonth: string = selectedMonth) {
     // Performance optimization: Quick check for null/undefined
     if (!newData) {
       if (geojsonData !== null) {
         geojsonData = null;
-        clustersComputedForData = null;
+        clustersLoadedForMonth = null;
         updateGeoJSONLayer();
       }
       return;
     }
     
     // Performance optimization: Quick reference check first
-    if (geojsonData === newData) {
-      // Same data object reference, no need to update
+    if (geojsonData === newData && selectedMonth === newMonth) {
+      // Same data object reference and month, no need to update
       return;
     }
 
-    // For data changes, update immediately and recompute clusters
+    // For data changes, update immediately
     geojsonData = newData;
-    clustersComputedForData = null; // Reset cluster cache since data changed
+    selectedMonth = newMonth;
+    clustersLoadedForMonth = null; // Reset cluster cache since data/month changed
     updateGeoJSONLayer();
 
-    // Update clusters after data changes
-    await updateClusters();
+    // Load precomputed clusters for the new month
+    await loadPrecomputedClustersForMonth();
   }
 
   // Expose resize function to parent

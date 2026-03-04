@@ -5,6 +5,7 @@
   import LegendComponent from './lib/components/LegendComponent.svelte';
   import { getCurrentMonthAbbreviation, getMonthFullName } from './utils/dateUtils';
   import { createDataLoaderWorker, loadGeoJSONInWorker } from './utils/workerLoader';
+  import { loadTreeSpeciesColors as loadTreeSpeciesColorsFromPrecomputed, getTreeSpeciesColors } from './utils/precomputedClusters';
 
   
   let geojsonData: GeoJSON.FeatureCollection | null = null;
@@ -98,17 +99,15 @@
   
   async function loadTreeSpeciesColors() {
     try {
-      console.log('Loading tree species colors from JSON file...');
+      console.log('Loading tree species colors from parquet file...');
       
-      // Load the pre-converted JSON file
-      const response = await fetch('/tree_species_colors.json');
-      if (!response.ok) {
-        throw new Error(`Failed to load JSON file: ${response.status} ${response.statusText}`);
-      }
+      // Load colors using the precomputed clusters module
+      await loadTreeSpeciesColorsFromPrecomputed();
       
-      const speciesColorsData = await response.json();
+      // Get the colors from the module
+      const speciesColorsData = getTreeSpeciesColors();
       
-      // Convert the JSON object to a Map
+      // Convert the object to a Map
       const colorsMap = new Map<string, string>();
       for (const [species, color] of Object.entries(speciesColorsData)) {
         if (species && color && species !== 'Others') {
@@ -117,7 +116,7 @@
       }
       
       treeSpeciesColors = colorsMap;
-      console.log(`Loaded ${colorsMap.size} tree species colors from JSON file`);
+      console.log(`Loaded ${colorsMap.size} tree species colors from parquet file`);
       console.log('Sample colors:', Array.from(colorsMap.entries()).slice(0, 10));
       
       // Debug: Log all the species names we loaded
@@ -125,7 +124,7 @@
       
     } catch (err) {
       console.error('Error loading tree species colors:', err);
-      // If we can't load the JSON file, we'll fall back to default colors
+      // If we can't load the parquet file, we'll fall back to default colors
       // Set up some default colors for common species
       const defaultColors = new Map<string, string>();
       defaultColors.set('Pink', '#ff69b4');
@@ -160,9 +159,9 @@
           geojsonData = result.data;
           lastLoadedMonth = month;
           
-          // Update the map view with the new data
+          // Update the map view with the new data and month
           if (mapViewRef && typeof mapViewRef.updateData === 'function') {
-            mapViewRef.updateData(result.data);
+            mapViewRef.updateData(result.data, month);
           }
         }
       } else {
@@ -182,9 +181,9 @@
         geojsonData = data;
         lastLoadedMonth = month;
         
-        // Update the map view with the new data
+        // Update the map view with the new data and month
         if (mapViewRef && typeof mapViewRef.updateData === 'function') {
-          mapViewRef.updateData(data);
+          mapViewRef.updateData(data, month);
         }
       }
       
@@ -195,7 +194,7 @@
       // Clear any existing data
       geojsonData = null;
       if (mapViewRef && typeof mapViewRef.updateData === 'function') {
-        mapViewRef.updateData(null);
+        mapViewRef.updateData(null, month);
       }
     } finally {
       isLoading = false;
@@ -237,7 +236,7 @@
         </div>
       {/if}
       
-      <MapView bind:this={mapViewRef} geojsonData={geojsonData} />
+      <MapView bind:this={mapViewRef} geojsonData={geojsonData} selectedMonth={selectedMonth} />
     </div>
     
     {#if isMobile}
